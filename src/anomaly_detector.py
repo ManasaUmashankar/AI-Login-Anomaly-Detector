@@ -2,7 +2,7 @@ import joblib
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 
-from src.detection_rules import apply_rules
+from src.detection_rules import apply_risk_scores, apply_rules
 from src.feature_engineering import build_features
 from src.preprocessing import preprocess_logs
 from src.read_dataset import load_logs
@@ -18,6 +18,13 @@ MODEL_FEATURES = [
 N_TREES = 100
 CONTAMINATION = 0.05     # our guess: about 5% of rows are anomalous
 RANDOM_STATE = 42        # makes the result the same every run
+
+# NEW (Stage 9)
+ML_REASON = "Statistically unusual pattern (ML)"
+FINAL_COLUMNS = [
+    "timestamp", "username", "ip_address", "location", "device", "login_status",
+    "risk_score", "risk_level", "ml_result", "final_status", "detection_reasons",
+]
 
 
 def train_model(features_df):
@@ -55,33 +62,84 @@ def apply_model(model, features_df):
     return df
 
 
-def main():
+# NEW (Stage 9)
+def add_ml_reason(df):
+    """Add the ML reason to rows the model flagged."""
+    is_anomalous = df["ml_result"] == "Anomalous"
+    has_reasons = df["detection_reasons"] != ""
+
+    df.loc[is_anomalous & has_reasons, "detection_reasons"] += "; " + ML_REASON
+    df.loc[is_anomalous & ~has_reasons, "detection_reasons"] = ML_REASON
+    return df
+
+
+# NEW (Stage 9)
+def final_status_for(risk_level, ml_result):
+    """Combine the risk level and ML result into one status."""
+    if risk_level == "High":
+        return "Requires investigation"
+    if risk_level == "Medium":
+        if ml_result == "Anomalous":
+            return "Requires investigation"
+        return "Potentially suspicious"
+    # Low risk
+    if ml_result == "Anomalous":
+        return "Potentially suspicious"
+    return "Normal activity"
+
+
+# NEW (Stage 9)
+def run_pipeline(retrain=False):
+    """Run every stage and return the final results table."""
     df = preprocess_logs(load_logs())
     features = build_features(df)
 
-    model = train_model(features)
-    save_model(model)
+    if retrain or not MODEL_PATH.exists():
+        save_model(train_model(features))
+    model = load_model()
+
+    result = apply_model(model, features)
+    result = apply_rules(result)
+    result = apply_risk_scores(result)
+    result = add_ml_reason(result)
+    result["final_status"] = [
+        final_status_for(level, ml)
+        for level, ml in zip(result["risk_level"], result["ml_result"])
+    ]
+    return result
+
+
+# NEW (Stage 9)
+def print_rows(rows):
+    """Print rows in an easy-to-read format."""
+    for _, row in rows.iterrows():
+        print(f"- {row['timestamp']} | {row['username']} | {row['ip_address']} | "
+              f"{row['location']} | {row['device']}")
+        print(f"    score {row['risk_score']} ({row['risk_level']}) | "
+              f"ML: {row['ml_result']} | status: {row['final_status']}")
+        print(f"    reasons: {row['detection_reasons']}")
+
+
+def main():
+    result = run_pipeline(retrain=True)
     print(f"\nModel trained and saved to {MODEL_PATH}")
 
-    # Load the saved file to prove saving and loading works
-    result = apply_model(load_model(), features)
-    result = apply_rules(result)
+    print("\nFinal status counts:")
+    print(result["final_status"].value_counts())
 
-    print("\nML result counts:")
-    print(result["ml_result"].value_counts())
+    print("\nRisk level vs ML result (number of rows):")
+    print(pd.crosstab(result["risk_level"], result["ml_result"]))
 
-    flagged = (result["rules_triggered"] > 0).map({True: "Yes", False: "No"})
-    result["flagged_by_rules"] = flagged
-    print("\nML result vs rules (number of rows):")
-    print(pd.crosstab(result["ml_result"], result["flagged_by_rules"]))
+    print("\nTop 3 rows that require investigation:")
+    urgent = result[result["final_status"] == "Requires investigation"]
+    print_rows(urgent.sort_values("risk_score", ascending=False).head(3))
 
-    print("\nMost unusual 5 rows (lowest anomaly_score):")
-    lowest = result.sort_values("anomaly_score").head(5)
-    print(lowest[["timestamp", "username", "ip_address", "login_status", "anomaly_score", "ml_result"]])
+    print("\nRows that are only 'Potentially suspicious':")
+    print_rows(result[result["final_status"] == "Potentially suspicious"])
 
-    missed = result[(result["ml_result"] == "Normal") & (result["rules_triggered"] > 0)]
-    print(f"\nRows the rules flagged but the model called Normal: {len(missed)}")
-    print(missed[["timestamp", "username", "ip_address", "login_status", "failed_attempts", "anomaly_score"]].head(5))
+    print("\nHigh risk by rules, but the model said Normal (2 examples):")
+    missed = result[(result["risk_level"] == "High") & (result["ml_result"] == "Normal")]
+    print_rows(missed.head(2))
 
 
 if __name__ == "__main__":
