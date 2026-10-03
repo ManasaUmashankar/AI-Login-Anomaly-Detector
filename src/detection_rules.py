@@ -7,6 +7,10 @@ FAILED_ATTEMPTS_THRESHOLD = 5
 FAILURES_BEFORE_SUCCESS_THRESHOLD = 3
 RAPID_LOGIN_THRESHOLD = 5
 
+# NEW (Stage 7): risk levels (also project-specific)
+LOW_MAX_SCORE = 2        # 0 to 2 = Low
+MEDIUM_MAX_SCORE = 5     # 3 to 5 = Medium, 6 and above = High
+
 
 def rule_multiple_failures(df):
     """Rule 1: many failed attempts in a row."""
@@ -45,6 +49,35 @@ RULES = [
 ]
 
 
+# NEW (Stage 7): simple yes/no signals taken straight from the features
+def signal_new_ip(df):
+    return df["is_new_ip"] == 1
+
+
+def signal_new_device(df):
+    return df["is_new_device"] == 1
+
+
+def signal_unusual_location(df):
+    return df["is_unusual_location"] == 1
+
+
+def signal_unusual_hour(df):
+    return df["is_unusual_hour"] == 1
+
+
+# NEW (Stage 7): each signal = (name, points, function that checks it)
+RISK_SIGNALS = [
+    ("Multiple failed login attempts", 2, rule_multiple_failures),
+    ("Successful login after repeated failures", 2, rule_success_after_failures),
+    ("New IP address", 2, signal_new_ip),
+    ("New device", 2, signal_new_device),
+    ("Unusual login location", 2, signal_unusual_location),
+    ("Rapid login attempts", 2, rule_rapid_logins),
+    ("Unusual login hour", 1, signal_unusual_hour),
+]
+
+
 def apply_rules(df):
     """Run every rule. Adds 'rules_triggered' (a count) and 'detection_reasons' (text)."""
     df = df.copy()
@@ -60,24 +93,48 @@ def apply_rules(df):
     return df
 
 
+# NEW (Stage 7)
+def risk_level_for(score):
+    """Turn a number into Low, Medium or High."""
+    if score <= LOW_MAX_SCORE:
+        return "Low"
+    if score <= MEDIUM_MAX_SCORE:
+        return "Medium"
+    return "High"
+
+
+# NEW (Stage 7)
+def apply_risk_scores(df):
+    """Add 'risk_score' (points added up) and 'risk_level' (Low/Medium/High)."""
+    df = df.copy()
+    df["risk_score"] = 0
+
+    for name, points, signal_function in RISK_SIGNALS:
+        hit = signal_function(df)                # True/False for every row
+        df["risk_score"] += hit.astype(int) * points
+
+    df["risk_level"] = df["risk_score"].apply(risk_level_for)
+    return df
+
+
 def main():
     df = preprocess_logs(load_logs())
     features = build_features(df)
-    result = apply_rules(features)
-
-    print("\nHow many rows each rule caught:")
-    for reason, rule_function in RULES:
-        print(f"  {reason}: {int(rule_function(result).sum())}")
+    result = apply_risk_scores(apply_rules(features))
 
     flagged = result[result["rules_triggered"] > 0]
     print(f"\nRows flagged by at least one rule: {len(flagged)} of {len(result)}")
 
-    print("\nTop 5 rows by number of rules triggered:")
-    top = flagged.sort_values("rules_triggered", ascending=False).head(5)
-    for _, row in top.iterrows():
-        print(f"- {row['timestamp']} | {row['username']} | {row['ip_address']} | "
-              f"{row['login_status']} | rules: {row['rules_triggered']}")
-        print(f"    reasons: {row['detection_reasons']}")
+    print("\nRisk level counts:")
+    levels = result["risk_level"].value_counts()
+    print(levels.reindex(["High", "Medium", "Low"], fill_value=0))
+
+    print("\nHow many rows have each risk score:")
+    print(result["risk_score"].value_counts().sort_index())
+
+    print("\nTop 5 highest risk scores:")
+    top = result.sort_values("risk_score", ascending=False).head(5)
+    print(top[["timestamp", "username", "ip_address", "login_status", "risk_score", "risk_level"]])
 
 
 if __name__ == "__main__":
