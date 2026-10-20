@@ -159,6 +159,50 @@ def evaluate_stress_test(history=None):
     return summary, rows
 
 
+def evaluate_scenario_detection(rows):
+    """Summarize whether each complete scenario generated an alert and how quickly.
+
+    Input rows must be in chronological order within each scenario. Detection delay
+    is the 1-based event position of the first alert; None means no alert occurred.
+    Scenario-level metrics count each scenario once, avoiding treating every early
+    event in a known suspicious sequence as a separate independent scenario.
+    """
+    required = {"scenario", "true_label", "rule_prediction", "ml_prediction"}
+    missing = sorted(required - set(rows.columns))
+    if missing:
+        raise ValueError(f"Stress results are missing required columns: {missing}")
+    if rows.empty:
+        raise ValueError("Stress results must not be empty.")
+
+    scenario_rows = []
+    for scenario, group in rows.groupby("scenario", sort=False):
+        group = group.reset_index(drop=True)
+        row = {
+            "scenario": scenario,
+            "true_label": group["true_label"].iloc[0],
+            "events": len(group),
+        }
+        for detector, prediction_column in (
+            ("rule", "rule_prediction"),
+            ("ml", "ml_prediction"),
+        ):
+            alerts = group[prediction_column].eq("anomaly").tolist()
+            first_alert = next((index + 1 for index, alert in enumerate(alerts) if alert), None)
+            row[f"{detector}_detected"] = first_alert is not None
+            row[f"{detector}_detection_delay_events"] = first_alert
+        scenario_rows.append(row)
+
+    scenario_summary = pd.DataFrame(scenario_rows)
+    actual = scenario_summary["true_label"]
+    metrics = {}
+    for detector in ("rule", "ml"):
+        predicted = scenario_summary[f"{detector}_detected"].map(
+            {True: "anomaly", False: "normal"}
+        )
+        metrics[detector] = calculate_metrics(actual, predicted)
+    return metrics, scenario_summary
+
+
 def _print_metrics(name, metrics):
     print(
         f"{name:12s} precision={metrics['precision']:.3f} "
@@ -176,7 +220,20 @@ def main():
     print("All cases are synthetic and deliberately selected, not a real-world benchmark.\n")
     _print_metrics("ML model", summary["ml"])
     _print_metrics("Rule baseline", summary["rules"])
-    print("\nPer-scenario outcomes:")
+    scenario_metrics, scenario_rows = evaluate_scenario_detection(rows)
+    print("\n========== SCENARIO-LEVEL DETECTION ==========")
+    print("Each complete sequence counts once; delay is the event position of the first alert.")
+    _print_metrics("ML scenarios", scenario_metrics["ml"])
+    _print_metrics("Rule scenarios", scenario_metrics["rule"])
+    print("\nScenario outcomes and detection delay:")
+    display_rows = scenario_rows.copy()
+    for detector in ("rule", "ml"):
+        display_rows[f"{detector}_detection_delay_events"] = display_rows[
+            f"{detector}_detection_delay_events"
+        ].map(lambda value: value if pd.notna(value) else "Not detected")
+    print(display_rows.to_string(index=False))
+
+    print("\nPer-event outcomes:")
     print(rows[[
         "scenario", "true_label", "risk_score", "rule_prediction",
         "ml_prediction", "rules_correct", "ml_correct",
