@@ -95,21 +95,21 @@ def build_stress_scenarios(history):
             scenario="benign_successes_spread_out",
         )
 
-    # Hard negatives: legitimate-looking activity that resembles suspicious patterns.
-    # These are deliberately ambiguous test labels, not claims that such behaviour is always benign.
+    # Ambiguous cases resemble suspicious patterns, so do not force a benign/attack label.
+    # Their alerts are reported separately and excluded from binary performance metrics.
     for attempt in range(6):
         emit(
             p0, minutes=150, seconds=attempt * 8, status="success",
-            label="normal", scenario="benign_rapid_success_familiar_context",
+            label="ambiguous", scenario="ambiguous_rapid_success_familiar_context",
         )
     for attempt in range(6):
         emit(
             p1, minutes=160 + attempt * 7, status="failed", failures=attempt + 1,
-            label="normal", scenario="benign_low_and_slow_failures",
+            label="ambiguous", scenario="ambiguous_low_and_slow_failures",
         )
     emit(
         p3, minutes=220, device="Temporary Work Laptop", location="Jaipur, India",
-        label="normal", scenario="benign_new_device_and_location_daytime",
+        label="ambiguous", scenario="ambiguous_new_device_and_location_daytime",
     )
 
     # Suspicious activity with otherwise familiar context.
@@ -180,10 +180,16 @@ def evaluate_stress_test(history=None):
         {True: "anomaly", False: "normal"}
     )
 
+    # Score only clearly labelled cases; retain ambiguous cases for separate alert review.
+    known_mask = actual.isin(["normal", "anomaly"])
+    if not known_mask.any():
+        raise ValueError("Stress evaluation requires clearly labelled scenario events.")
     summary = {
-        "ml": calculate_metrics(actual, ml_prediction),
-        "rules": calculate_metrics(actual, rule_prediction),
-        "hybrid": calculate_metrics(actual, hybrid_prediction),
+        "ml": calculate_metrics(actual[known_mask], ml_prediction[known_mask]),
+        "rules": calculate_metrics(actual[known_mask], rule_prediction[known_mask]),
+        "hybrid": calculate_metrics(actual[known_mask], hybrid_prediction[known_mask]),
+        "evaluated_events": int(known_mask.sum()),
+        "ambiguous_events": int((~known_mask).sum()),
     }
     diagnostic_columns = [
         "scenario", "username", "timestamp", "true_label",
@@ -196,8 +202,11 @@ def evaluate_stress_test(history=None):
     rows["ml_prediction"] = ml_prediction.to_numpy()
     rows["hybrid_prediction"] = hybrid_prediction.to_numpy()
     rows["ml_anomaly_score"] = ml["anomaly_score"].to_numpy()
-    rows["ml_correct"] = rows["ml_prediction"].eq(rows["true_label"])
-    rows["rules_correct"] = rows["rule_prediction"].eq(rows["true_label"])
+    known_rows = rows["true_label"].isin(["normal", "anomaly"])
+    rows["ml_correct"] = pd.Series(pd.NA, index=rows.index, dtype="boolean")
+    rows["rules_correct"] = pd.Series(pd.NA, index=rows.index, dtype="boolean")
+    rows.loc[known_rows, "ml_correct"] = rows.loc[known_rows, "ml_prediction"].eq(rows.loc[known_rows, "true_label"])
+    rows.loc[known_rows, "rules_correct"] = rows.loc[known_rows, "rule_prediction"].eq(rows.loc[known_rows, "true_label"])
     return summary, rows
 
 
@@ -222,6 +231,7 @@ def evaluate_scenario_detection(rows):
         row = {
             "scenario": scenario,
             "true_label": group["true_label"].iloc[0],
+            "evaluation_scope": "ambiguous_review" if group["true_label"].iloc[0] == "ambiguous" else "scored",
             "events": len(group),
         }
         detector_columns = [("rule", "rule_prediction"), ("ml", "ml_prediction")]
@@ -235,7 +245,7 @@ def evaluate_scenario_detection(rows):
         scenario_rows.append(row)
 
     scenario_summary = pd.DataFrame(scenario_rows)
-    actual = scenario_summary["true_label"]
+    known_mask = scenario_summary["true_label"].isin(["normal", "anomaly"])
     metrics = {}
     for detector in ("rule", "ml", "hybrid"):
         if f"{detector}_detected" not in scenario_summary.columns:
@@ -243,7 +253,10 @@ def evaluate_scenario_detection(rows):
         predicted = scenario_summary[f"{detector}_detected"].map(
             {True: "anomaly", False: "normal"}
         )
-        metrics[detector] = calculate_metrics(actual, predicted)
+        metrics[detector] = calculate_metrics(
+            scenario_summary.loc[known_mask, "true_label"],
+            predicted[known_mask],
+        )
     return metrics, scenario_summary
 
 
@@ -261,7 +274,8 @@ def main():
     summary, rows = evaluate_stress_test()
     print("\n========== SYNTHETIC EDGE-CASE STRESS TEST ==========")
     print("Model trained on historical rows only; stress scenarios are held out.")
-    print("All cases are synthetic and deliberately selected, not a real-world benchmark.\n")
+    print("All cases are synthetic and deliberately selected, not a real-world benchmark.")
+    print(f"Clearly labelled events scored: {summary['evaluated_events']}; ambiguous events excluded from binary metrics: {summary['ambiguous_events']}.\n")
     _print_metrics("ML model", summary["ml"])
     _print_metrics("Rule baseline", summary["rules"])
     _print_metrics("Hybrid detector", summary["hybrid"])
@@ -278,6 +292,12 @@ def main():
             f"{detector}_detection_delay_events"
         ].map(lambda value: value if pd.notna(value) else "Not detected")
     print(display_rows.to_string(index=False))
+    ambiguous_rows = display_rows[display_rows["evaluation_scope"] == "ambiguous_review"]
+    print("\nAmbiguous-case alert review (not counted as false positives or true positives):")
+    if ambiguous_rows.empty:
+        print("No ambiguous scenarios.")
+    else:
+        print(ambiguous_rows[["scenario", "events", "rule_detected", "ml_detected", "hybrid_detected"]].to_string(index=False))
 
     print("\nPer-event outcomes:")
     display_events = rows[[
