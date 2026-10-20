@@ -30,14 +30,14 @@ def make_history():
 def test_stress_scenarios_keep_benign_and_anomaly_labels_separate():
     stress = build_stress_scenarios(make_history())
 
-    assert len(stress) == 43
+    assert len(stress) == 51
     assert set(stress["true_label"]) == {"normal", "anomaly", "ambiguous"}
     benign = stress[stress["scenario"].str.startswith("benign_")]
     ambiguous = stress[stress["scenario"].str.startswith("ambiguous_")]
     suspicious = stress[stress["scenario"].str.startswith("anomaly_")]
     assert len(benign) == 10
-    assert len(ambiguous) == 13
-    assert len(suspicious) == 20
+    assert len(ambiguous) == 17
+    assert len(suspicious) == 24
     assert benign["true_label"].eq("normal").all()
     assert ambiguous["true_label"].eq("ambiguous").all()
     assert suspicious["true_label"].eq("anomaly").all()
@@ -98,6 +98,24 @@ def test_stress_set_includes_hard_negative_benign_scenarios():
     assert low_slow["true_label"].eq("ambiguous").all()
     assert len(contextual) == 1
     assert contextual.iloc[0]["true_label"] == "ambiguous"
+
+
+def test_stress_set_includes_cross_account_spray_and_shared_network_ambiguity():
+    stress = build_stress_scenarios(make_history())
+
+    spray = stress[stress["scenario"] == "anomaly_cross_account_password_spray"]
+    shared = stress[stress["scenario"] == "ambiguous_shared_network_failures"]
+
+    assert len(spray) == 4
+    assert spray["username"].nunique() == 4
+    assert spray["ip_address"].nunique() == 1
+    assert spray["login_status"].eq("failed").all()
+    assert spray["true_label"].eq("anomaly").all()
+
+    assert len(shared) == 4
+    assert shared["username"].nunique() == 4
+    assert shared["ip_address"].nunique() == 1
+    assert shared["true_label"].eq("ambiguous").all()
 
 
 def test_scenario_evaluation_reports_detection_and_first_alert_position():
@@ -161,6 +179,7 @@ def test_stress_evaluation_returns_finite_model_scores_and_rolling_diagnostics()
     required_diagnostics = {
         "failed_logins_45m",
         "successful_logins_5m",
+        "distinct_failed_users_per_ip_15m",
         "login_frequency",
         "is_new_ip",
         "is_new_device",
