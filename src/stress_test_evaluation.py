@@ -273,7 +273,7 @@ def main():
     _print_metrics("Hybrid scenarios", scenario_metrics["hybrid"])
     print("\nScenario outcomes and detection delay:")
     display_rows = scenario_rows.copy()
-    for detector in ("rule", "ml"):
+    for detector in ("rule", "ml", "hybrid"):
         display_rows[f"{detector}_detection_delay_events"] = display_rows[
             f"{detector}_detection_delay_events"
         ].map(lambda value: value if pd.notna(value) else "Not detected")
