@@ -1,3 +1,4 @@
+
 import random
 from datetime import datetime, timedelta
 
@@ -5,19 +6,43 @@ import pandas as pd
 
 from src.utils import DATA_PATH
 
-random.seed(42)  # makes the "random" data the same every time
+random.seed(42)  # Reproducible random data
 
 START_DATE = datetime(2026, 9, 1)
 
-# Each user's normal habits
+# Each user's normal login habits
 USERS = {
-    "alice":   {"ip": "203.0.113.11", "location": "Mumbai, India",    "device": "Windows Laptop", "start": 9,  "end": 18},
-    "bob":     {"ip": "203.0.113.12", "location": "Pune, India",      "device": "MacBook",        "start": 8,  "end": 17},
-    "charlie": {"ip": "203.0.113.13", "location": "Delhi, India",     "device": "Android Phone",  "start": 10, "end": 20},
-    "diana":   {"ip": "203.0.113.14", "location": "Bengaluru, India", "device": "Windows Laptop", "start": 9,  "end": 17},
+    "alice": {
+        "ip": "203.0.113.11",
+        "location": "Mumbai, India",
+        "device": "Windows Laptop",
+        "start": 9,
+        "end": 18,
+    },
+    "bob": {
+        "ip": "203.0.113.12",
+        "location": "Pune, India",
+        "device": "MacBook",
+        "start": 8,
+        "end": 17,
+    },
+    "charlie": {
+        "ip": "203.0.113.13",
+        "location": "Delhi, India",
+        "device": "Android Phone",
+        "start": 10,
+        "end": 20,
+    },
+    "diana": {
+        "ip": "203.0.113.14",
+        "location": "Bengaluru, India",
+        "device": "Windows Laptop",
+        "start": 9,
+        "end": 17,
+    },
 }
 
-# The browser name that goes with each device
+# Browser associated with each device
 USER_AGENTS = {
     "Windows Laptop": "Chrome on Windows",
     "MacBook": "Safari on Mac",
@@ -25,14 +50,24 @@ USER_AGENTS = {
     "Unknown Device": "python-requests",
 }
 
-# Fake "attacker" IPs and places (reserved test addresses, not real people)
-BAD_IPS = ["198.51.100.23", "198.51.100.77", "192.0.2.45"]
-BAD_PLACES = ["Moscow, Russia", "Lagos, Nigeria", "Sao Paulo, Brazil"]
+# Reserved example IPs and fictional suspicious locations
+BAD_IPS = [
+    "198.51.100.23",
+    "198.51.100.77",
+    "192.0.2.45",
+]
+
+BAD_PLACES = [
+    "Moscow, Russia",
+    "Lagos, Nigeria",
+    "Sao Paulo, Brazil",
+]
 
 
 def random_time(start_hour, end_hour):
-    """Pick a random moment on a random day between two hours."""
+    """Generate a random timestamp within the selected hours."""
     day = START_DATE + timedelta(days=random.randrange(30))
+
     return day + timedelta(
         hours=random.randint(start_hour, end_hour),
         minutes=random.randrange(60),
@@ -40,8 +75,17 @@ def random_time(start_hour, end_hour):
     )
 
 
-def make_row(time, username, ip, location, device, status, failed_attempts):
-    """Build ONE log line (one row of the CSV) as a dictionary."""
+def make_row(
+    time,
+    username,
+    ip,
+    location,
+    device,
+    status,
+    failed_attempts,
+    label="normal",
+):
+    """Create one login record with a ground-truth scenario label."""
     return {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "username": username,
@@ -52,75 +96,166 @@ def make_row(time, username, ip, location, device, status, failed_attempts):
         "failed_attempts": failed_attempts,
         "user_agent": USER_AGENTS[device],
         "session_id": f"{random.getrandbits(48):012x}",
+        "true_label": label,
     }
 
 
 def make_normal_rows(count):
-    """Normal logins: usual IP, device, hours. Sometimes a small typo."""
+    """Generate ordinary logins, including occasional failed attempts."""
     rows = []
+
     for _ in range(count):
         name = random.choice(list(USERS))
         user = USERS[name]
+
         time = random_time(user["start"], user["end"])
-        if random.random() < 0.05:  # 5% of the time: one typo
+
+        if random.random() < 0.05:
             status, failed = "failed", 1
         else:
             status, failed = "success", 0
-        rows.append(make_row(time, name, user["ip"], user["location"], user["device"], status, failed))
+
+        rows.append(
+            make_row(
+                time,
+                name,
+                user["ip"],
+                user["location"],
+                user["device"],
+                status,
+                failed,
+                label="normal",
+            )
+        )
+
     return rows
 
 
 def make_brute_force_rows(name, ends_in_success):
-    """Many failures within seconds from a strange IP."""
+    """Generate repeated failed logins, optionally followed by success."""
     time = random_time(0, 23)
     ip = random.choice(BAD_IPS)
     place = random.choice(BAD_PLACES)
     tries = random.randint(6, 12)
+
     rows = []
+
     for number in range(1, tries + 1):
-        rows.append(make_row(time, name, ip, place, "Unknown Device", "failed", number))
+        rows.append(
+            make_row(
+                time,
+                name,
+                ip,
+                place,
+                "Unknown Device",
+                "failed",
+                number,
+                label="anomaly",
+            )
+        )
+
         time += timedelta(seconds=random.randint(1, 4))
+
     if ends_in_success:
-        rows.append(make_row(time, name, ip, place, "Unknown Device", "success", tries))
+        rows.append(
+            make_row(
+                time,
+                name,
+                ip,
+                place,
+                "Unknown Device",
+                "success",
+                tries,
+                label="anomaly",
+            )
+        )
+
     return rows
 
 
 def make_odd_login_row(name):
-    """One successful login: new IP, new device, far country, 1-4 AM."""
+    """Generate a successful login at an unusual hour from a new location."""
     time = random_time(1, 4)
-    return make_row(time, name, random.choice(BAD_IPS), random.choice(BAD_PLACES),
-                    "Unknown Device", "success", 0)
+
+    return make_row(
+        time,
+        name,
+        random.choice(BAD_IPS),
+        random.choice(BAD_PLACES),
+        "Unknown Device",
+        "success",
+        0,
+        label="anomaly",
+    )
 
 
 def make_rapid_rows(name):
-    """6 logins, 10 seconds apart, from a strange IP."""
+    """Generate a burst of suspicious logins ten seconds apart."""
     time = random_time(0, 23)
     ip = random.choice(BAD_IPS)
     place = random.choice(BAD_PLACES)
+
     rows = []
+
     for _ in range(6):
-        rows.append(make_row(time, name, ip, place, "Unknown Device", "success", 0))
+        rows.append(
+            make_row(
+                time,
+                name,
+                ip,
+                place,
+                "Unknown Device",
+                "success",
+                0,
+                label="anomaly",
+            )
+        )
+
         time += timedelta(seconds=10)
+
     return rows
 
 
 def main():
     names = list(USERS)
+
+    # Generate ordinary login records
     rows = make_normal_rows(1500)
 
-    for i in range(5):                       # 5 brute-force events
-        rows += make_brute_force_rows(random.choice(names), ends_in_success=(i < 3))
-    for _ in range(8):                       # 8 odd logins
+    # Generate five brute-force scenarios
+    for i in range(5):
+        rows += make_brute_force_rows(
+            random.choice(names),
+            ends_in_success=(i < 3),
+        )
+
+    # Generate eight unusual login scenarios
+    for _ in range(8):
         rows.append(make_odd_login_row(random.choice(names)))
-    for _ in range(4):                       # 4 rapid-login bursts
+
+    # Generate four rapid-login bursts
+    for _ in range(4):
         rows += make_rapid_rows(random.choice(names))
 
-    df = pd.DataFrame(rows)                  # list of dictionaries -> table
+    df = pd.DataFrame(rows)
     df = df.sort_values("timestamp").reset_index(drop=True)
 
-    DATA_PATH.parent.mkdir(exist_ok=True)
+    # Save the labelled synthetic dataset
+    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(DATA_PATH, index=False)
+
     print(f"Saved {len(df)} records to {DATA_PATH}")
+
+    print("\nGround-truth label counts:")
+    print(df["true_label"].value_counts())
+
+    print("\nLabel proportions:")
+    print(
+        (df["true_label"].value_counts(normalize=True) * 100)
+        .round(2)
+        .astype(str)
+        .add("%")
+    )
 
 
 if __name__ == "__main__":

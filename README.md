@@ -4,7 +4,7 @@ An educational **Blue Team** project that analyses synthetic login logs and flag
 
 > **Important:** an anomaly is a signal to investigate, not proof of an attack. This project uses synthetic data only and is not a production security tool.
 
-**Author:** Your Name  |  **Repository:** https://github.com/your-username/AI-Login-Anomaly-Detector
+**Author:** Manasa Umashankar |  **Repository:** https://github.com/ManasaUmashankar/AI-Login-Anomaly-Detector
 
 ---
 
@@ -92,7 +92,7 @@ data/login_logs.csv
               |                            |
               v                            v
    Rules + Risk scoring             Isolation Forest
-   (explainable)                    (behavioural anomaly)
+   (explainable)                    (behavioural anomaly)F
               |                            |
               +-------------+--------------+
                             v

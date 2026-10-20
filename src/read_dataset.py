@@ -1,59 +1,76 @@
+
 import pandas as pd
 
 from src.utils import DATA_PATH
 
-# Show all columns when printing (otherwise Pandas hides some)
 pd.set_option("display.width", 200)
 pd.set_option("display.max_columns", None)
 
+REQUIRED_COLUMNS = [
+    "timestamp",
+    "username",
+    "ip_address",
+    "location",
+    "device",
+    "login_status",
+    "failed_attempts",
+    "user_agent",
+    "session_id",
+]
 
-def load_logs():
-    """Read the CSV file into a DataFrame."""
-    try:
-        df = pd.read_csv(DATA_PATH)
-    except FileNotFoundError:
-        print("login_logs.csv not found. Run: python -m src.generate_dataset")
-        raise
-    return df
+
+def load_logs(include_labels=False):
+    """Load login logs, optionally preserving ground-truth labels."""
+    df = pd.read_csv(DATA_PATH)
+
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    if include_labels:
+        if "true_label" not in df.columns:
+            raise ValueError("Dataset is missing the 'true_label' column.")
+        return df.copy()
+
+    return df[REQUIRED_COLUMNS].copy()
 
 
 def show_section(title):
-    """Print a heading so the output is easy to read."""
     print(f"\n===== {title} =====")
 
 
 def explore(df):
-    show_section("FIRST 5 ROWS (head)")
+    show_section("FIRST 5 ROWS")
     print(df.head())
 
-    show_section("LAST 5 ROWS (tail)")
+    show_section("LAST 5 ROWS")
     print(df.tail())
 
-    show_section("SHAPE (rows, columns)")
+    show_section("SHAPE")
     print(df.shape)
 
     show_section("COLUMN NAMES")
     print(list(df.columns))
 
-    show_section("INFO (types and missing values)")
+    show_section("INFO")
     df.info()
 
-    show_section("DESCRIBE (stats for number columns)")
+    show_section("DESCRIPTIVE STATISTICS")
     print(df.describe())
 
-    show_section("FAILED LOGINS ONLY (filtering)")
+    show_section("FAILED LOGINS")
     failed = df[df["login_status"] == "failed"]
     print(f"Number of failed logins: {len(failed)}")
 
-    show_section("ROWS WITH 5+ FAILED ATTEMPTS IN A ROW")
-    many_failures = df[df["failed_attempts"] >= 5]
-    print(many_failures[["timestamp", "username", "ip_address", "failed_attempts"]])
+    show_section("ROWS WITH 5+ FAILED ATTEMPTS")
+    print(
+        df.loc[
+            df["failed_attempts"] >= 5,
+            ["timestamp", "username", "ip_address", "failed_attempts"],
+        ]
+    )
 
-    show_section("TOP 5 HIGHEST failed_attempts (sorting)")
-    top = df.sort_values("failed_attempts", ascending=False).head(5)
-    print(top[["timestamp", "username", "ip_address", "failed_attempts", "login_status"]])
-
-    show_section("LOGIN STATUS COUNTS (value_counts)")
+    show_section("LOGIN STATUS COUNTS")
     print(df["login_status"].value_counts())
 
     show_section("LOGINS PER USER")

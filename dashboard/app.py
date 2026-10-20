@@ -156,3 +156,85 @@ else:
     table = suspicious.sort_values(["risk_score", "timestamp"], ascending=[False, True])
     table = table[list(TABLE_COLUMNS)].rename(columns=TABLE_COLUMNS)
     st.dataframe(table, hide_index=True)
+
+    
+# ---------- Alert investigation view ----------
+st.subheader("Alert investigation")
+
+if suspicious.empty:
+    st.info("No suspicious events available to investigate.")
+else:
+    investigation_data = suspicious.sort_values(
+        ["risk_score", "timestamp"],
+        ascending=[False, True]
+    ).copy()
+
+    investigation_data["alert_label"] = (
+        investigation_data["username"].astype(str)
+        + " | "
+        + investigation_data["timestamp"].astype(str)
+        + " | Risk: "
+        + investigation_data["risk_level"].astype(str)
+    )
+
+    selected_alert = st.selectbox(
+        "Select a login event",
+        investigation_data.index,
+        format_func=lambda idx: investigation_data.loc[idx, "alert_label"]
+    )
+
+    alert = investigation_data.loc[selected_alert]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Risk score", alert["risk_score"])
+    c2.metric("Risk level", alert["risk_level"])
+    c3.metric("ML result", alert["ml_result"])
+
+    st.markdown("### Login details")
+    st.write("**Timestamp:**", alert["timestamp"])
+    st.write("**Username:**", alert["username"])
+    st.write("**IP address:**", alert["ip_address"])
+    st.write("**Location:**", alert["location"])
+    st.write("**Device:**", alert["device"])
+    st.write("**Login status:**", alert["login_status"])
+    st.write("**Final status:**", alert["final_status"])
+
+    st.markdown("### Why was this flagged?")
+    st.write(alert["detection_reasons"])
+
+    st.markdown("### Recommended investigation steps")
+
+    reasons = str(alert["detection_reasons"]).lower()
+    recommendations = []
+
+    if "failed login" in reasons or "repeated failures" in reasons:
+        recommendations.append(
+            "Review failed login attempts and check whether a successful login followed them."
+        )
+
+    if "new ip" in reasons or "ip address" in reasons:
+        recommendations.append(
+            "Check whether the IP address is expected for this user."
+        )
+
+    if "new device" in reasons or "device" in reasons:
+        recommendations.append(
+            "Verify whether the device is recognised by the account owner."
+        )
+
+    if "unusual hour" in reasons or "unusual pattern" in reasons:
+        recommendations.append(
+            "Compare the login time with the user's normal activity."
+        )
+
+    if recommendations:
+        for recommendation in recommendations:
+            st.markdown(f"- {recommendation}")
+    else:
+        st.info(
+            "Review the event details and related authentication logs manually."
+        )
+
+    st.caption(
+        "These are investigation suggestions, not proof of malicious activity."
+    )
