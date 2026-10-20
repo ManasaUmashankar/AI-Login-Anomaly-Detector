@@ -64,18 +64,21 @@ def make_ml_frame():
         "is_unusual_location": 0,
         "login_frequency": 1,
         "location_change": 0,
+        "failed_logins_45m": 0,
+        "successful_logins_5m": 1,
     })
     outlier = pd.DataFrame([{
         "login_hour": 3, "failed_attempts": 12, "is_new_ip": 1, "is_new_device": 1,
         "is_unusual_hour": 1, "is_unusual_location": 1, "login_frequency": 13,
-        "location_change": 1,
+        "location_change": 1, "failed_logins_45m": 12, "successful_logins_5m": 13,
     }])
     return pd.concat([normal, outlier], ignore_index=True)
 
 
-@pytest.fixture(scope="module")
-def pipeline_result():
-    """Run the whole real pipeline once and share the result with several tests."""
+@pytest.fixture
+def pipeline_result(tmp_path, monkeypatch):
+    """Run the pipeline with an isolated model artifact; never overwrite the user's model."""
+    monkeypatch.setattr("src.anomaly_detector.MODEL_PATH", tmp_path / "pipeline_model.pkl")
     return run_pipeline()
 
 
