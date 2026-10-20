@@ -11,6 +11,7 @@ from sklearn.metrics import (
 )
 
 from src.anomaly_detector import MODEL_FEATURES, apply_model, train_model
+from src.detection_rules import apply_risk_scores, apply_rules
 from src.feature_engineering import build_features
 from src.preprocessing import preprocess_logs
 from src.read_dataset import load_logs
@@ -150,9 +151,18 @@ def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
             )
 
         metrics = calculate_metrics(y_true, y_pred)
+
+        # Compare the ML model with an explainable rule/risk-score baseline.
+        rule_results = apply_risk_scores(apply_rules(test_features.copy()))
+        baseline_pred = rule_results["risk_score"].ge(3).map(
+            {True: "anomaly", False: "normal"}
+        )
+        baseline_metrics = calculate_metrics(y_true, baseline_pred)
+
         results.append({
             "window": index + 1,
             "metrics": metrics,
+            "baseline_metrics": baseline_metrics,
             "metadata": {
                 "train_rows": len(train_features),
                 "test_rows": len(test_features),
@@ -189,11 +199,21 @@ def print_temporal_window_report(results):
         )
         print("  Confusion matrix [actual normal, anomaly] x [predicted normal, anomaly]:")
         print(metrics["confusion_matrix"])
+        baseline = result["baseline_metrics"]
+        print(
+            "  Rule baseline (risk score >= 3): "
+            f"Precision {baseline['precision']:.4f} | Recall {baseline['recall']:.4f} | "
+            f"F1 {baseline['f1']:.4f} | FPR {baseline['false_positive_rate']:.4f}"
+        )
 
     print("\\n========== UNWEIGHTED MEAN ACROSS WINDOWS ==========")
     for name in metric_names:
         mean_value = sum(item["metrics"][name] for item in results) / len(results)
-        print(f"{name.replace('_', ' ').title():22s} {mean_value:.4f}")
+        baseline_mean = sum(item["baseline_metrics"][name] for item in results) / len(results)
+        print(
+            f"{name.replace('_', ' ').title():22s} "
+            f"ML {mean_value:.4f} | Rule baseline {baseline_mean:.4f}"
+        )
 
 
 def main():
