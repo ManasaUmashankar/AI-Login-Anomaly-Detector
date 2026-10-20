@@ -8,6 +8,7 @@ FAILURES_BEFORE_SUCCESS_THRESHOLD = 3
 RAPID_LOGIN_THRESHOLD = 5
 FAILED_LOGIN_WINDOW_THRESHOLD = 5
 RAPID_SUCCESS_WINDOW_THRESHOLD = 5
+FAILED_USERS_PER_SOURCE_THRESHOLD = 4
 
 # NEW (Stage 7): risk levels (also project-specific)
 LOW_MAX_SCORE = 2        # 0 to 2 = Low
@@ -51,6 +52,11 @@ def rule_rapid_successes(df):
     return df["successful_logins_5m"] >= RAPID_SUCCESS_WINDOW_THRESHOLD
 
 
+def rule_password_spray_source(df):
+    """Flag a source IP with failures against four or more accounts in 15 minutes."""
+    return df["distinct_failed_users_per_ip_15m"] >= FAILED_USERS_PER_SOURCE_THRESHOLD
+
+
 # Each rule = (reason text, function that checks it)
 RULES = [
     ("Multiple failed login attempts", rule_multiple_failures),
@@ -60,6 +66,7 @@ RULES = [
     ("Rapid login attempts", rule_rapid_logins),
     ("Repeated failed logins within 45 minutes", rule_repeated_failures_in_window),
     ("Rapid successful login burst", rule_rapid_successes),
+    ("Failed logins against multiple accounts from one source", rule_password_spray_source),
 ]
 
 
@@ -91,6 +98,7 @@ RISK_SIGNALS = [
     ("Unusual login hour", 1, signal_unusual_hour),
     ("Repeated failures within 45 minutes", 3, rule_repeated_failures_in_window),
     ("Rapid successful logins within 5 minutes", 3, rule_rapid_successes),
+    ("Multiple accounts failed from one source within 15 minutes", 3, rule_password_spray_source),
 ]
 
 
