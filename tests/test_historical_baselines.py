@@ -76,7 +76,7 @@ def test_simultaneous_events_have_order_independent_frequency_and_location_featu
     ]
 
     forward = build_features(make_logs([prior] + simultaneous))
-    reverse = build_features(make_logs([prior] + list(reversed(simultaneous)))
+    reverse = build_features(make_logs([prior] + list(reversed(simultaneous))))
 
     def by_event(frame):
         return {
