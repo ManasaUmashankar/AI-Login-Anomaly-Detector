@@ -72,7 +72,10 @@ def add_location_change(df):
                 ).astype("int64")
 
             counts = batch["location"].value_counts(sort=False)
-            previous_location = counts.idxmax()
+            # Deterministic tie-break independent of original row order.
+            previous_location = sorted(
+                counts.items(), key=lambda item: (-item[1], str(item[0]))
+            )[0][0]
 
     df["location_change"] = flags
     return df
