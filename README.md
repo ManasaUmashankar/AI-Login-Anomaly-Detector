@@ -159,7 +159,7 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | New device from an unusual location | Device and location both differ from the user's usual |
 | Rapid login attempts | 5 or more attempts by one user within 5 minutes |
 
-Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the user's most common IP, device, and location in the data.
+Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the most common IP, device, and location in earlier login history only. Events with the same timestamp share one baseline, and a user's first observed timestamp has no historical baseline yet.
 
 ### Risk scoring
 
@@ -189,7 +189,7 @@ The project uses **unsupervised learning**: the model is trained without labels,
 
 The model only sees these eight numeric features: `login_hour`, `failed_attempts`, `is_new_ip`, `is_new_device`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, and `location_change`.
 
-The trained model is saved with Joblib to `models/anomaly_model.pkl`, so the dashboard can load it instead of retraining every time.
+The trained model is saved with Joblib to `models/anomaly_model.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
 
 > `.pkl` (pickle) files can run code when loaded. Only load model files from sources you trust.
 
@@ -319,7 +319,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 | Changing user behaviour and model drift | Habits change over time, so the baseline and model need regular updates. |
 | Project-specific thresholds | Scores, levels, and thresholds are design choices, not standards. |
 | Guessed `contamination` | The share of anomalies is assumed, not discovered. |
-| Baseline built from the whole dataset | A real system should use only past logins, and an attacker flooding an account could distort a "usual" baseline. |
+| Cumulative historical baseline | Future events no longer influence past features, but repeated suspicious events can eventually shift the most-common value; production systems need trusted or rolling baselines. |
 | Generated failure counter | `failed_attempts` is recorded by our generator. Real logs require the system to count recent failures itself. |
 | `location_change` is noisy | It also fires when a user returns to their normal location, so it is not used as a rule on its own. |
 | No real infrastructure | There is no real authentication system and no production-scale log ingestion. |
