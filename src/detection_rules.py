@@ -6,6 +6,8 @@ from src.read_dataset import load_logs
 FAILED_ATTEMPTS_THRESHOLD = 5
 FAILURES_BEFORE_SUCCESS_THRESHOLD = 3
 RAPID_LOGIN_THRESHOLD = 5
+FAILED_LOGIN_WINDOW_THRESHOLD = 5
+RAPID_SUCCESS_WINDOW_THRESHOLD = 5
 
 # NEW (Stage 7): risk levels (also project-specific)
 LOW_MAX_SCORE = 2        # 0 to 2 = Low
@@ -39,6 +41,16 @@ def rule_rapid_logins(df):
     return df["login_frequency"] >= RAPID_LOGIN_THRESHOLD
 
 
+def rule_repeated_failures_in_window(df):
+    """Flag five or more failed events in the trailing 45-minute window."""
+    return df["failed_logins_45m"] >= FAILED_LOGIN_WINDOW_THRESHOLD
+
+
+def rule_rapid_successes(df):
+    """Flag five or more successful events in the trailing five-minute window."""
+    return df["successful_logins_5m"] >= RAPID_SUCCESS_WINDOW_THRESHOLD
+
+
 # Each rule = (reason text, function that checks it)
 RULES = [
     ("Multiple failed login attempts", rule_multiple_failures),
@@ -46,6 +58,8 @@ RULES = [
     ("New IP address at an unusual hour", rule_new_ip_unusual_hour),
     ("New device from an unusual location", rule_new_device_unusual_location),
     ("Rapid login attempts", rule_rapid_logins),
+    ("Repeated failed logins within 45 minutes", rule_repeated_failures_in_window),
+    ("Rapid successful login burst", rule_rapid_successes),
 ]
 
 
@@ -75,6 +89,8 @@ RISK_SIGNALS = [
     ("Unusual login location", 2, signal_unusual_location),
     ("Rapid login attempts", 2, rule_rapid_logins),
     ("Unusual login hour", 1, signal_unusual_hour),
+    ("Repeated failures within 45 minutes", 3, rule_repeated_failures_in_window),
+    ("Rapid successful logins within 5 minutes", 3, rule_rapid_successes),
 ]
 
 
