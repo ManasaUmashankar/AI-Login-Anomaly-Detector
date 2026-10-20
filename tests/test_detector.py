@@ -273,3 +273,36 @@ def test_calculate_metrics_rejects_empty_holdout():
 
     with pytest.raises(ValueError, match="empty"):
         calculate_metrics([], [])
+
+
+
+def test_multi_window_evaluation_uses_expanding_chronological_training(monkeypatch):
+    from src.evaluate_model import evaluate_temporal_windows
+
+    monkeypatch.setattr("src.evaluate_model.train_model", lambda frame: object())
+    monkeypatch.setattr(
+        "src.evaluate_model.apply_model",
+        lambda model, frame: pd.DataFrame({"ml_result": ["Normal"] * len(frame)}),
+    )
+
+    rows = [
+        make_row(f"2026-09-{day:02d} 10:00:00")
+        for day in range(1, 13)
+    ]
+    frame = make_logs(rows)
+    frame["true_label"] = ["normal", "anomaly"] * 6
+
+    results = evaluate_temporal_windows(frame, train_fraction=0.50, windows=3)
+
+    assert len(results) == 3
+    assert [item["metadata"]["train_rows"] for item in results] == [6, 8, 10]
+    assert [item["metadata"]["test_rows"] for item in results] == [2, 2, 2]
+    assert all("baseline_metrics" in item for item in results)
+    assert all(item["metrics"]["fn"] >= 0 for item in results)
+
+
+def test_multi_window_evaluation_rejects_fewer_than_two_windows():
+    from src.evaluate_model import evaluate_temporal_windows
+
+    with pytest.raises(ValueError, match="at least 2"):
+        evaluate_temporal_windows(pd.DataFrame(), windows=1)
