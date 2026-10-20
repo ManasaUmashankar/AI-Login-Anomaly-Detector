@@ -7,7 +7,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import plotly.express as px
 import streamlit as st
 
-from src.anomaly_detector import run_pipeline
+from src.anomaly_detector import FEATURE_VERSION, run_pipeline
 
 NORMAL_STATUS = "Normal activity"
 RISK_ORDER = ["Low", "Medium", "High"]
@@ -31,8 +31,8 @@ st.set_page_config(page_title="AI Login Anomaly Detector", layout="wide")
 
 
 @st.cache_data
-def load_results():
-    """Run the full pipeline once and remember the answer."""
+def load_results(feature_version=FEATURE_VERSION):
+    """Cache results per feature version so old dashboard results are invalidated."""
     return run_pipeline()
 
 
@@ -42,7 +42,7 @@ def make_count_chart(df, column, title):
     return px.bar(counts, x=column, y="count", color="final_status", title=title)
 
 
-results = load_results()
+results = load_results(FEATURE_VERSION)
 
 st.title("AI Login Anomaly Detector")
 st.caption(
