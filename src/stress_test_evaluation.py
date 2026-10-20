@@ -158,10 +158,15 @@ def evaluate_stress_test(history=None):
     actual = stress_features["true_label"].reset_index(drop=True)
     ml_prediction = ml["ml_result"].map({"Normal": "normal", "Anomalous": "anomaly"})
     rule_prediction = rules["risk_score"].ge(3).map({True: "anomaly", False: "normal"})
+    # Hybrid alerts if either detector raises an alert; this is a layered detector, not an ML-only result.
+    hybrid_prediction = (ml_prediction.eq("anomaly") | rule_prediction.eq("anomaly")).map(
+        {True: "anomaly", False: "normal"}
+    )
 
     summary = {
         "ml": calculate_metrics(actual, ml_prediction),
         "rules": calculate_metrics(actual, rule_prediction),
+        "hybrid": calculate_metrics(actual, hybrid_prediction),
     }
     diagnostic_columns = [
         "scenario", "username", "timestamp", "true_label",
@@ -172,6 +177,7 @@ def evaluate_stress_test(history=None):
     rows["risk_score"] = rules["risk_score"].to_numpy()
     rows["rule_prediction"] = rule_prediction.to_numpy()
     rows["ml_prediction"] = ml_prediction.to_numpy()
+    rows["hybrid_prediction"] = hybrid_prediction.to_numpy()
     rows["ml_anomaly_score"] = ml["anomaly_score"].to_numpy()
     rows["ml_correct"] = rows["ml_prediction"].eq(rows["true_label"])
     rows["rules_correct"] = rows["rule_prediction"].eq(rows["true_label"])
@@ -201,10 +207,10 @@ def evaluate_scenario_detection(rows):
             "true_label": group["true_label"].iloc[0],
             "events": len(group),
         }
-        for detector, prediction_column in (
-            ("rule", "rule_prediction"),
-            ("ml", "ml_prediction"),
-        ):
+        detector_columns = [("rule", "rule_prediction"), ("ml", "ml_prediction")]
+        if "hybrid_prediction" in group.columns:
+            detector_columns.append(("hybrid", "hybrid_prediction"))
+        for detector, prediction_column in detector_columns:
             alerts = group[prediction_column].eq("anomaly").tolist()
             first_alert = next((index + 1 for index, alert in enumerate(alerts) if alert), None)
             row[f"{detector}_detected"] = first_alert is not None
@@ -214,7 +220,9 @@ def evaluate_scenario_detection(rows):
     scenario_summary = pd.DataFrame(scenario_rows)
     actual = scenario_summary["true_label"]
     metrics = {}
-    for detector in ("rule", "ml"):
+    for detector in ("rule", "ml", "hybrid"):
+        if f"{detector}_detected" not in scenario_summary.columns:
+            continue
         predicted = scenario_summary[f"{detector}_detected"].map(
             {True: "anomaly", False: "normal"}
         )
@@ -239,11 +247,13 @@ def main():
     print("All cases are synthetic and deliberately selected, not a real-world benchmark.\n")
     _print_metrics("ML model", summary["ml"])
     _print_metrics("Rule baseline", summary["rules"])
+    _print_metrics("Hybrid detector", summary["hybrid"])
     scenario_metrics, scenario_rows = evaluate_scenario_detection(rows)
     print("\n========== SCENARIO-LEVEL DETECTION ==========")
     print("Each complete sequence counts once; delay is the event position of the first alert.")
     _print_metrics("ML scenarios", scenario_metrics["ml"])
     _print_metrics("Rule scenarios", scenario_metrics["rule"])
+    _print_metrics("Hybrid scenarios", scenario_metrics["hybrid"])
     print("\nScenario outcomes and detection delay:")
     display_rows = scenario_rows.copy()
     for detector in ("rule", "ml"):
@@ -257,7 +267,7 @@ def main():
         "scenario", "true_label", "failed_logins_45m", "successful_logins_5m",
         "login_frequency", "is_new_ip", "is_new_device", "is_unusual_location",
         "location_change", "risk_score", "ml_anomaly_score", "rule_prediction",
-        "ml_prediction", "rules_correct", "ml_correct",
+        "ml_prediction", "hybrid_prediction", "rules_correct", "ml_correct",
     ]].copy()
     display_events["ml_anomaly_score"] = display_events["ml_anomaly_score"].round(4)
     print(display_events.to_string(index=False))
