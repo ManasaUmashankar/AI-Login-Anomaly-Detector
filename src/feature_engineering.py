@@ -54,43 +54,53 @@ def add_difference_from_usual(df, column, new_name):
     return df
 
 def add_location_change(df):
-    """1 if location differs from the same user's previous login."""
-    previous = df.groupby("username")["location"].shift(1)
-    df["location_change"] = ((df["location"] != previous) & previous.notna()).astype(int)
+    """Flag location changes against the user's most recent earlier timestamp.
+
+    Rows sharing a timestamp are evaluated as one batch. They all compare with
+    the previous timestamp's location, then the batch establishes history for
+    later events. This avoids row-order-dependent features for simultaneous logs.
+    """
+    flags = pd.Series(0, index=df.index, dtype="int64")
+    ordered = df.sort_values(["username", "timestamp"], kind="stable")
+
+    for _, user_group in ordered.groupby("username", sort=False):
+        previous_location = None
+        for _, batch in user_group.groupby("timestamp", sort=True):
+            if previous_location is not None:
+                flags.loc[batch.index] = (
+                    batch["location"] != previous_location
+                ).astype("int64")
+
+            counts = batch["location"].value_counts(sort=False)
+            previous_location = counts.idxmax()
+
+    df["location_change"] = flags
     return df
 
 
 def add_login_frequency(df):
-    """Count each user's logins in the last few minutes (sliding window)."""
-    window = pd.Timedelta(minutes=FREQUENCY_WINDOW_MINUTES)
-    frequency = pd.Series(0, index=df.index)
+    """Count trailing-window logins while batching equal timestamps.
 
-    for username, group in df.groupby("username"):
-        times = list(group["timestamp"])       # already in time order
-        counts = []
-        start = 0
-        for i, current in enumerate(times):
-            # move 'start' forward until it is inside the window
-            while current - times[start] > window:
-                start += 1
-            counts.append(i - start + 1)
-        frequency.loc[group.index] = counts
+    Simultaneous events receive the same frequency count; their row order does
+    not affect the feature value.
+    """
+    window = pd.Timedelta(minutes=FREQUENCY_WINDOW_MINUTES)
+    frequency = pd.Series(0, index=df.index, dtype="int64")
+    ordered = df.sort_values(["username", "timestamp"], kind="stable")
+
+    for _, user_group in ordered.groupby("username", sort=False):
+        prior_times = []
+        for _, batch in user_group.groupby("timestamp", sort=True):
+            current = batch["timestamp"].iloc[0]
+            prior_times = [
+                timestamp for timestamp in prior_times
+                if current - timestamp <= window
+            ]
+            frequency.loc[batch.index] = len(prior_times) + len(batch)
+            prior_times.extend(batch["timestamp"].tolist())
 
     df["login_frequency"] = frequency
     return df
-
-
-def build_features(df):
-    """Add every feature column to a cleaned DataFrame."""
-    df = df.sort_values("timestamp").reset_index(drop=True)
-    df = add_time_features(df)
-    df = add_difference_from_usual(df, "ip_address", "is_new_ip")
-    df = add_difference_from_usual(df, "device", "is_new_device")
-    df = add_difference_from_usual(df, "location", "is_unusual_location")
-    df = add_location_change(df)
-    df = add_login_frequency(df)
-    return df
-
 
 def main():
     df = preprocess_logs(load_logs())
