@@ -1,7 +1,7 @@
 import pandas as pd
 
 from src.preprocessing import REQUIRED_COLUMNS
-from src.stress_test_evaluation import build_stress_scenarios
+from src.stress_test_evaluation import build_stress_scenarios, evaluate_scenario_detection
 
 
 def make_history():
@@ -26,12 +26,12 @@ def make_history():
 def test_stress_scenarios_keep_benign_and_anomaly_labels_separate():
     stress = build_stress_scenarios(make_history())
 
-    assert len(stress) == 23
+    assert len(stress) == 30
     assert set(stress["true_label"]) == {"normal", "anomaly"}
     benign = stress[stress["scenario"].str.startswith("benign_")]
     suspicious = stress[stress["scenario"].str.startswith("anomaly_")]
-    assert len(benign) == 4
-    assert len(suspicious) == 19
+    assert len(benign) == 10
+    assert len(suspicious) == 20
     assert (benign["true_label"] == "normal").all()
     assert (suspicious["true_label"] == "anomaly").all()
 
@@ -58,3 +58,43 @@ def test_suspicious_scenarios_include_familiar_context_and_low_and_slow():
     assert brute_force["ip_address"].nunique() == 1
     assert rapid["login_status"].eq("success").all()
     assert low_slow["timestamp"].diff().dropna().dt.total_seconds().eq(420).all()
+
+def test_stress_set_includes_spaced_benign_successes_and_daytime_contextual_anomaly():
+    stress = build_stress_scenarios(make_history())
+
+    spaced = stress[stress["scenario"] == "benign_successes_spread_out"]
+    contextual = stress[stress["scenario"] == "anomaly_new_device_and_location_daytime"]
+
+    assert len(spaced) == 6
+    assert spaced["true_label"].eq("normal").all()
+    assert spaced["login_status"].eq("success").all()
+    assert spaced["timestamp"].diff().dropna().dt.total_seconds().eq(360).all()
+    assert len(contextual) == 1
+    assert contextual.iloc[0]["true_label"] == "anomaly"
+    assert contextual.iloc[0]["device"] == "Temporary Work Laptop"
+    assert contextual.iloc[0]["location"] == "Jaipur, India"
+
+
+def test_scenario_evaluation_reports_detection_and_first_alert_position():
+    rows = pd.DataFrame([
+        {"scenario": "benign", "true_label": "normal",
+         "rule_prediction": "normal", "ml_prediction": "normal"},
+        {"scenario": "slow_attack", "true_label": "anomaly",
+         "rule_prediction": "normal", "ml_prediction": "normal"},
+        {"scenario": "slow_attack", "true_label": "anomaly",
+         "rule_prediction": "anomaly", "ml_prediction": "normal"},
+        {"scenario": "single_attack", "true_label": "anomaly",
+         "rule_prediction": "anomaly", "ml_prediction": "anomaly"},
+    ])
+
+    metrics, scenarios = evaluate_scenario_detection(rows)
+    by_name = scenarios.set_index("scenario")
+
+    assert by_name.loc["slow_attack", "rule_detection_delay_events"] == 2
+    assert pd.isna(by_name.loc["slow_attack", "ml_detection_delay_events"])
+    assert by_name.loc["single_attack", "rule_detection_delay_events"] == 1
+    assert metrics["rule"]["recall"] == 1.0
+    assert metrics["ml"]["recall"] == 0.5
+    assert metrics["rule"]["false_positive_rate"] == 0.0
+    assert metrics["ml"]["false_positive_rate"] == 0.0
+
