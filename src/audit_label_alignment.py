@@ -40,10 +40,10 @@ def binary_metrics(y_true, y_pred):
 
 def audit_label_alignment(df, risk_threshold=3):
     """Compare individual rule signals and combined risk scores with synthetic labels."""
+    if not isinstance(risk_threshold, int) or isinstance(risk_threshold, bool) or risk_threshold < 0:
+        raise ValueError("risk_threshold must be a non-negative integer.")
     if "true_label" not in df.columns:
         raise ValueError("Dataset must contain a true_label column for auditing.")
-    if not isinstance(risk_threshold, int) or risk_threshold < 0:
-        raise ValueError("risk_threshold must be a non-negative integer.")
 
     working = df.copy()
     working["timestamp"] = pd.to_datetime(working["timestamp"], errors="coerce")
