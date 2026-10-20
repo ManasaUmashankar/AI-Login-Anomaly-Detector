@@ -105,40 +105,101 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
     return metrics, metadata
 
 
+
+def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
+    """Evaluate consecutive future windows with an expanding training history."""
+    if "true_label" not in df.columns:
+        raise ValueError("Dataset must contain a true_label column for evaluation.")
+    if not 0.30 <= train_fraction < 0.90:
+        raise ValueError("train_fraction must be at least 0.30 and less than 0.90.")
+    if not isinstance(windows, int) or windows < 2:
+        raise ValueError("windows must be an integer of at least 2.")
+
+    working = df.copy()
+    working["timestamp"] = pd.to_datetime(working["timestamp"], errors="coerce")
+    working = working.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    working["true_label"] = normalize_labels(working["true_label"]).values
+    cleaned = preprocess_logs(working)
+    features = build_features(cleaned)
+
+    total_rows = len(features)
+    initial_train_rows = math.floor(total_rows * train_fraction)
+    remaining_rows = total_rows - initial_train_rows
+    if initial_train_rows < 2 or remaining_rows < windows:
+        raise ValueError("Not enough valid rows for the requested temporal windows.")
+
+    results = []
+    for index in range(windows):
+        test_start = initial_train_rows + math.floor(index * remaining_rows / windows)
+        test_end = initial_train_rows + math.floor((index + 1) * remaining_rows / windows)
+        if test_end <= test_start:
+            raise ValueError("Each temporal holdout window must contain at least one row.")
+
+        train_features = features.iloc[:test_start]
+        test_features = features.iloc[test_start:test_end]
+        model = train_model(train_features)
+        predictions = apply_model(model, test_features)
+
+        y_true = normalize_labels(test_features["true_label"])
+        y_pred = predictions["ml_result"].astype(str).str.lower().map(
+            {"normal": "normal", "anomalous": "anomaly"}
+        )
+        if y_pred.isna().any():
+            raise ValueError(
+                f"Unexpected prediction values: {predictions['ml_result'].unique().tolist()}"
+            )
+
+        metrics = calculate_metrics(y_true, y_pred)
+        results.append({
+            "window": index + 1,
+            "metrics": metrics,
+            "metadata": {
+                "train_rows": len(train_features),
+                "test_rows": len(test_features),
+                "train_end": train_features["timestamp"].max(),
+                "test_start": test_features["timestamp"].min(),
+                "test_end": test_features["timestamp"].max(),
+                "actual_anomalies": int((y_true == "anomaly").sum()),
+                "predicted_anomalies": int((y_pred == "anomaly").sum()),
+            },
+        })
+
+    return results
+
+
+def print_temporal_window_report(results):
+    """Print per-window metrics and an unweighted mean across windows."""
+    metric_names = ("precision", "recall", "f1", "false_positive_rate", "accuracy")
+    print("\\n========== MULTI-WINDOW TEMPORAL EVALUATION ==========")
+    print("Each window is evaluated using a model trained only on earlier rows.")
+    print("All results are from synthetic data and are not a real-world benchmark.")
+
+    for result in results:
+        metrics = result["metrics"]
+        meta = result["metadata"]
+        print(f"\\nWindow {result['window']}")
+        print(f"  Training rows: {meta['train_rows']} (through {meta['train_end']})")
+        print(f"  Holdout rows:  {meta['test_rows']} ({meta['test_start']} to {meta['test_end']})")
+        print(f"  Actual anomalies: {meta['actual_anomalies']}")
+        print(f"  Predicted anomalies: {meta['predicted_anomalies']}")
+        print(
+            "  Precision: {precision:.4f} | Recall: {recall:.4f} | "
+            "F1: {f1:.4f} | FPR: {false_positive_rate:.4f} | "
+            "Accuracy: {accuracy:.4f}".format(**metrics)
+        )
+        print("  Confusion matrix [actual normal, anomaly] x [predicted normal, anomaly]:")
+        print(metrics["confusion_matrix"])
+
+    print("\\n========== UNWEIGHTED MEAN ACROSS WINDOWS ==========")
+    for name in metric_names:
+        mean_value = sum(item["metrics"][name] for item in results) / len(results)
+        print(f"{name.replace('_', ' ').title():22s} {mean_value:.4f}")
+
+
 def main():
     df = load_logs(include_labels=True)
-    metrics, split = evaluate_temporal_holdout(df)
-
-    print("\n========== CHRONOLOGICAL HOLDOUT EVALUATION ==========")
-    print("The model is trained on earlier events and evaluated on later unseen events.")
-    print(f"Total valid logins:      {split['total_rows']}")
-    print(f"Training logins:         {split['train_rows']}")
-    print(f"Holdout logins:          {split['test_rows']}")
-    print(f"Training ends:           {split['train_end']}")
-    print(f"Holdout starts:          {split['test_start']}")
-    print(f"Actual holdout anomalies: {(split['y_true'] == 'anomaly').sum()}")
-    print(f"Predicted anomalies:      {(split['y_pred'] == 'anomaly').sum()}")
-
-    print("\n========== PERFORMANCE METRICS ==========")
-    print(f"Accuracy:            {metrics['accuracy']:.4f}")
-    print(f"Precision:           {metrics['precision']:.4f}")
-    print(f"Recall:              {metrics['recall']:.4f}")
-    print(f"F1-score:            {metrics['f1']:.4f}")
-    print(f"False-positive rate: {metrics['false_positive_rate']:.4f}")
-
-    print("\n========== CONFUSION MATRIX ==========")
-    print("Rows = actual [normal, anomaly]; columns = predicted [normal, anomaly]")
-    print(metrics["confusion_matrix"])
-
-    print("\n========== CLASSIFICATION REPORT ==========")
-    print(classification_report(
-        split["y_true"],
-        split["y_pred"],
-        labels=["normal", "anomaly"],
-        target_names=["Normal", "Anomaly"],
-        zero_division=0,
-    ))
-    print("Evaluation completed. Results describe this synthetic temporal holdout, not real-world performance.")
+    results = evaluate_temporal_windows(df, train_fraction=0.40, windows=4)
+    print_temporal_window_report(results)
 
 
 if __name__ == "__main__":
