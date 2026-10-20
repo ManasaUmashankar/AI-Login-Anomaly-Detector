@@ -366,3 +366,17 @@ It is **much simpler** than a real SIEM such as Splunk. It does not collect live
 ## Disclaimer
 
 This is an educational cybersecurity project focused on **defensive security**: detection, monitoring, and analysis. It uses synthetic data only. It does not contain instructions for attacking real systems, stealing credentials, or bypassing authentication. Results must not be treated as proof of malicious activity, and the project is not suitable for production use.
+
+## Synthetic Label / Rule Alignment Audit
+
+Run the audit from the repository root:
+
+```bash
+python -m src.audit_label_alignment
+```
+
+This report compares each individual risk signal and the combined risk-score baseline against `true_label`, including precision, recall, F1, false-positive rate, accuracy, and anomaly rate by risk score.
+
+**Why this matters:** the dataset generator creates anomalies through specific scenarios (repeated failures, unusual-hour logins from unfamiliar locations/devices, and rapid-login bursts). Several of the detector rules target those same scenario characteristics. Strong rule performance on this dataset may therefore reflect how its labels were constructed, rather than independent evidence that the rules will generalise to real authentication logs.
+
+Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger future evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
