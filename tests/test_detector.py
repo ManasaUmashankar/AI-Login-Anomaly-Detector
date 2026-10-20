@@ -132,6 +132,33 @@ def test_location_change_flags_the_switch():
     assert list(features["location_change"]) == [0] * 10 + [1]
 
 
+def test_rolling_login_status_windows_count_only_each_users_recent_events():
+    rows = [
+        make_row("2026-09-01 12:00:00", status="failed", failed=1),
+        make_row("2026-09-01 12:07:00", status="failed", failed=2),
+        make_row("2026-09-01 12:14:00", status="failed", failed=3),
+        make_row("2026-09-01 12:21:00", status="failed", failed=4),
+        make_row("2026-09-01 12:28:00", status="failed", failed=5),
+        make_row("2026-09-01 12:35:00", status="failed", failed=6),
+        make_row("2026-09-01 13:30:00", status="success"),
+    ]
+    features = build_features(make_logs(rows))
+    assert list(features["failed_logins_45m"]) == [1, 2, 3, 4, 5, 6, 0]
+    assert list(features["successful_logins_5m"]) == [0, 0, 0, 0, 0, 0, 1]
+
+
+def test_rapid_success_burst_is_flagged_without_unfamiliar_context():
+    rows = baseline_rows() + [
+        make_row(f"2026-09-15 14:00:{second:02d}", status="success")
+        for second in (1, 8, 15, 22, 29, 36)
+    ]
+    result = analyse(rows)
+    burst = result.iloc[-1]
+    assert burst["successful_logins_5m"] == 6
+    assert "Rapid successful login burst" in burst["detection_reasons"]
+    assert burst["risk_score"] >= 3
+
+
 # ---------- Detection rules ----------
 def test_normal_logins_trigger_no_rules():
     result = analyse(baseline_rows())
@@ -146,7 +173,7 @@ def test_brute_force_then_success_triggers_expected_rules():
     assert "Multiple failed login attempts" in last["detection_reasons"]
     assert "Successful login after repeated failures" in last["detection_reasons"]
     assert "Rapid login attempts" in last["detection_reasons"]
-    assert last["rules_triggered"] == 4         # (not at an unusual hour, so no rule 3)
+    assert last["rules_triggered"] == 5         # includes the 45-minute repeated-failure rule
 
 
 # ---------- Risk scoring ----------
@@ -170,10 +197,10 @@ def test_vpn_like_login_is_medium_not_high():
     assert last["risk_level"] == "Medium"
 
 
-def test_brute_force_success_scores_12_and_high():
+def test_brute_force_success_scores_15_and_high():
     result = analyse(baseline_rows() + brute_force_rows())
     last = result.iloc[-1]
-    assert last["risk_score"] == 12             # six signals x 2 points, daytime
+    assert last["risk_score"] == 15             # original six signals plus rolling repeated-failure signal
     assert last["risk_level"] == "High"
 
 
