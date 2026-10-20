@@ -108,7 +108,14 @@ def test_stress_evaluation_returns_finite_model_scores_and_rolling_diagnostics()
     history = make_history()
     history["true_label"] = "normal"
 
-    _, rows = evaluate_stress_test(history)
+    summary, rows = evaluate_stress_test(history)
+
+    assert "hybrid" in summary
+    assert rows["hybrid_prediction"].eq(
+        rows[["ml_prediction", "rule_prediction"]].apply(
+            lambda predictions: "anomaly" if "anomaly" in predictions.values else "normal", axis=1
+        )
+    ).all()
 
     required_diagnostics = {
         "failed_logins_45m",
