@@ -309,9 +309,9 @@ def main():
     display_events["ml_anomaly_score"] = display_events["ml_anomaly_score"].round(4)
     print(display_events.to_string(index=False))
     print(
-        "\nInterpretation: inspect which benign edge cases are falsely flagged and which "
-        "suspicious sequences are missed. The stress set is intentionally small and should "
-        "be expanded before drawing broad conclusions."
+        "\nInterpretation: binary metrics use only clearly labelled cases. Ambiguous cases "
+        "are reported separately because a pattern alone cannot establish malicious intent. "
+        "The stress set is intentionally small and is not a real-world benchmark."
     )
 
 
