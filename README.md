@@ -262,6 +262,7 @@ Run these from the project folder with the virtual environment active:
 python -m src.generate_dataset             # 1. create the synthetic logs
 python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
+python -m src.evaluate_model                # 4. evaluate on a later chronological holdout
 python -m streamlit run dashboard/app.py   # 4. open the dashboard
 ```
 
@@ -291,6 +292,10 @@ Rapid login attempts; Statistically unusual pattern (ML)
 ```
 
 The dataset contains planted synthetic scenarios. Performance on those scenarios is useful for testing the code, but it does not predict performance on real authentication logs.
+
+## Model Evaluation
+
+Run `python -m src.evaluate_model` to train Isolation Forest on the earlier 70% of valid login events and evaluate it on the later 30%. The report includes precision, recall, F1-score, false-positive rate, and a confusion matrix. The evaluation model is fitted only on the training period; ground-truth labels are used only to score the holdout predictions. Features are built chronologically so later events do not define earlier user baselines. This is still a synthetic-data experiment, not a real-world benchmark.
 
 ## Testing
 
