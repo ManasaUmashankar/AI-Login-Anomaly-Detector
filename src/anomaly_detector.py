@@ -12,13 +12,14 @@ from src.utils import MODEL_PATH
 MODEL_FEATURES = [
     "login_hour", "failed_attempts", "is_new_ip", "is_new_device",
     "is_unusual_hour", "is_unusual_location", "login_frequency", "location_change",
+    "failed_logins_45m", "successful_logins_5m",
 ]
 
 # Model settings (project choices, not universal standards)
 N_TREES = 100
 CONTAMINATION = 0.05     # our guess: about 5% of rows are anomalous
 RANDOM_STATE = 42        # makes the result the same every run
-FEATURE_VERSION = 2      # bump when feature semantics change
+FEATURE_VERSION = 3      # rolling-window features added to the model inputs
 
 # NEW (Stage 9)
 ML_REASON = "Statistically unusual pattern (ML)"
