@@ -102,6 +102,19 @@ def add_login_frequency(df):
     df["login_frequency"] = frequency
     return df
 
+
+def build_features(df):
+    """Add all model features using strictly historical, timestamp-safe baselines."""
+    df = df.copy()
+    df = df.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    df = add_time_features(df)
+    df = add_difference_from_usual(df, "ip_address", "is_new_ip")
+    df = add_difference_from_usual(df, "device", "is_new_device")
+    df = add_difference_from_usual(df, "location", "is_unusual_location")
+    df = add_location_change(df)
+    df = add_login_frequency(df)
+    return df
+
 def main():
     df = preprocess_logs(load_logs())
     features = build_features(df)
