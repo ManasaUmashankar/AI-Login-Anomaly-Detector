@@ -1,7 +1,11 @@
 import pandas as pd
 
 from src.preprocessing import REQUIRED_COLUMNS
-from src.stress_test_evaluation import build_stress_scenarios, evaluate_scenario_detection
+from src.stress_test_evaluation import (
+    build_stress_scenarios,
+    evaluate_scenario_detection,
+    evaluate_stress_test,
+)
 
 
 def make_history():
@@ -98,3 +102,25 @@ def test_scenario_evaluation_reports_detection_and_first_alert_position():
     assert metrics["rule"]["false_positive_rate"] == 0.0
     assert metrics["ml"]["false_positive_rate"] == 0.0
 
+
+
+def test_stress_evaluation_returns_finite_model_scores_and_rolling_diagnostics():
+    history = make_history()
+    history["true_label"] = "normal"
+
+    _, rows = evaluate_stress_test(history)
+
+    required_diagnostics = {
+        "failed_logins_45m",
+        "successful_logins_5m",
+        "login_frequency",
+        "is_new_ip",
+        "is_new_device",
+        "is_unusual_location",
+        "location_change",
+        "ml_anomaly_score",
+    }
+    assert required_diagnostics.issubset(rows.columns)
+    assert rows["ml_anomaly_score"].notna().all()
+    assert rows["failed_logins_45m"].notna().all()
+    assert rows["successful_logins_5m"].notna().all()
