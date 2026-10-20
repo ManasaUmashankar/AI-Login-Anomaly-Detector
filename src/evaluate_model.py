@@ -180,14 +180,14 @@ def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
 def print_temporal_window_report(results):
     """Print per-window metrics and an unweighted mean across windows."""
     metric_names = ("precision", "recall", "f1", "false_positive_rate", "accuracy")
-    print("\\n========== MULTI-WINDOW TEMPORAL EVALUATION ==========")
+    print("\n========== MULTI-WINDOW TEMPORAL EVALUATION ==========")
     print("Each window is evaluated using a model trained only on earlier rows.")
     print("All results are from synthetic data and are not a real-world benchmark.")
 
     for result in results:
         metrics = result["metrics"]
         meta = result["metadata"]
-        print(f"\\nWindow {result['window']}")
+        print(f"\nWindow {result['window']}")
         print(f"  Training rows: {meta['train_rows']} (through {meta['train_end']})")
         print(f"  Holdout rows:  {meta['test_rows']} ({meta['test_start']} to {meta['test_end']})")
         print(f"  Actual anomalies: {meta['actual_anomalies']}")
@@ -206,7 +206,7 @@ def print_temporal_window_report(results):
             f"F1 {baseline['f1']:.4f} | FPR {baseline['false_positive_rate']:.4f}"
         )
 
-    print("\\n========== UNWEIGHTED MEAN ACROSS WINDOWS ==========")
+    print("\n========== UNWEIGHTED MEAN ACROSS WINDOWS ==========")
     for name in metric_names:
         mean_value = sum(item["metrics"][name] for item in results) / len(results)
         baseline_mean = sum(item["baseline_metrics"][name] for item in results) / len(results)
