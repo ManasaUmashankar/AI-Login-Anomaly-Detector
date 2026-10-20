@@ -144,6 +144,24 @@ def build_stress_scenarios(history):
         label="anomaly", scenario="anomaly_new_device_and_location_daytime",
     )
 
+    # Password-spraying-style sequence: one source IP fails against several accounts.
+    spray_profiles = [p0, p1, p2, p3]
+    for attempt, profile in enumerate(spray_profiles, start=1):
+        emit(
+            profile, minutes=240, seconds=attempt * 20,
+            ip="198.51.100.203", status="failed", failures=1,
+            label="anomaly", scenario="anomaly_cross_account_password_spray",
+        )
+
+    # Shared office/NAT networks can produce a similar pattern without malicious intent.
+    # Keep this case ambiguous so the rule is reviewed, not scored as definitely malicious.
+    for attempt, profile in enumerate(spray_profiles, start=1):
+        emit(
+            profile, minutes=250, seconds=attempt * 20,
+            ip="198.51.100.204", status="failed", failures=1,
+            label="ambiguous", scenario="ambiguous_shared_network_failures",
+        )
+
     result = pd.DataFrame(rows, columns=STRESS_COLUMNS + ["scenario"])
     return result.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
