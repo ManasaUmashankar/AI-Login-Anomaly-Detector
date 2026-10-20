@@ -295,7 +295,9 @@ The dataset contains planted synthetic scenarios. Performance on those scenarios
 
 ## Model Evaluation
 
-Run `python -m src.evaluate_model` to train Isolation Forest on the earlier 70% of valid login events and evaluate it on the later 30%. The report includes precision, recall, F1-score, false-positive rate, and a confusion matrix. The evaluation model is fitted only on the training period; ground-truth labels are used only to score the holdout predictions. Features are built chronologically so later events do not define earlier user baselines. This is still a synthetic-data experiment, not a real-world benchmark.
+Run `python -m src.evaluate_model` to perform **four chronological holdout windows**. The model starts with the earliest 40% of valid login events, then evaluates consecutive later windows while expanding the training history. Each window reports precision, recall, F1-score, false-positive rate, accuracy, and a confusion matrix. The report also compares Isolation Forest with a simple explainable rule-based baseline that flags rows with a risk score of 3 or higher.
+
+The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
 ## Testing
 
