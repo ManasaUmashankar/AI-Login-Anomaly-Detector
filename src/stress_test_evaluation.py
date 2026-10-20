@@ -85,7 +85,7 @@ def build_stress_scenarios(history):
     emit(p0, minutes=1, ip="198.51.100.201", scenario="benign_new_ip_only")
     emit(p1, minutes=2, device="Temporary Work Laptop", scenario="benign_new_device_only")
     emit(p2, minutes=3, location="Jaipur, India", scenario="benign_new_location_only")
-    emit(p3, minutes=4, scenario="benign_off_hours_only")
+    emit(p3, minutes=-420, scenario="benign_off_hours_only")
 
     # Suspicious activity with otherwise familiar context.
     for attempt in range(1, 7):
