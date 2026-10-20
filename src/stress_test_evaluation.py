@@ -47,7 +47,7 @@ def build_stress_scenarios(history):
 
     profiles = _user_profiles(clean_history)
     usernames = list(profiles)
-    start = clean_history["timestamp"].max().normalize() + pd.Timedelta(days=1)
+    start = clean_history["timestamp"].max().normalize() + pd.Timedelta(days=1, hours=10)
     rows = []
     counter = 0
 
@@ -85,7 +85,7 @@ def build_stress_scenarios(history):
     emit(p0, minutes=1, ip="198.51.100.201", scenario="benign_new_ip_only")
     emit(p1, minutes=2, device="Temporary Work Laptop", scenario="benign_new_device_only")
     emit(p2, minutes=3, location="Jaipur, India", scenario="benign_new_location_only")
-    emit(p3, minutes=4, minutes=4, scenario="benign_off_hours_only")
+    emit(p3, minutes=4, scenario="benign_off_hours_only")
 
     # Suspicious activity with otherwise familiar context.
     for attempt in range(1, 7):
@@ -102,7 +102,7 @@ def build_stress_scenarios(history):
     # Low-and-slow sequence: repeated failures without crossing the five-minute burst threshold.
     for attempt in range(6):
         emit(
-            p2, minutes=30 + attempt * 7, status="failed", failures=1,
+            p2, minutes=30 + attempt * 7, status="failed", failures=attempt + 1,
             label="anomaly", scenario="anomaly_low_and_slow_failures",
         )
 
