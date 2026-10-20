@@ -242,3 +242,34 @@ def test_pipeline_most_rows_are_normal_activity(pipeline_result):
 def test_pipeline_top_risk_row_requires_investigation(pipeline_result):
     top = pipeline_result.loc[pipeline_result["risk_score"].idxmax()]
     assert top["final_status"] == "Requires investigation"
+
+# ---------- Evaluation methodology ----------
+def test_calculate_metrics_counts_confusion_matrix_and_false_positives():
+    from src.evaluate_model import calculate_metrics
+
+    actual = ["normal", "normal", "normal", "anomaly", "anomaly"]
+    predicted = ["normal", "anomaly", "normal", "anomaly", "normal"]
+    metrics = calculate_metrics(actual, predicted)
+
+    assert metrics["tn"] == 2
+    assert metrics["fp"] == 1
+    assert metrics["fn"] == 1
+    assert metrics["tp"] == 1
+    assert metrics["false_positive_rate"] == pytest.approx(1 / 3)
+    assert metrics["precision"] == pytest.approx(1 / 2)
+    assert metrics["recall"] == pytest.approx(1 / 2)
+    assert metrics["f1"] == pytest.approx(1 / 2)
+
+
+def test_calculate_metrics_rejects_mismatched_lengths():
+    from src.evaluate_model import calculate_metrics
+
+    with pytest.raises(ValueError, match="same length"):
+        calculate_metrics(["normal"], ["normal", "anomaly"])
+
+
+def test_calculate_metrics_rejects_empty_holdout():
+    from src.evaluate_model import calculate_metrics
+
+    with pytest.raises(ValueError, match="empty"):
+        calculate_metrics([], [])
