@@ -9,6 +9,7 @@ UNUSUAL_FROM_HOUR = 22         # logins from 22:00 onward count as unusual
 FREQUENCY_WINDOW_MINUTES = 5   # window for counting recent logins
 FAILED_LOGIN_WINDOW_MINUTES = 45  # rolling window for repeated failed-login events
 SUCCESS_LOGIN_WINDOW_MINUTES = 5  # rolling window for rapid successful logins
+FAILED_SOURCE_USER_WINDOW_MINUTES = 15  # distinct accounts failing from one source IP
 
 FLAG_COLUMNS = [
     "is_unusual_hour", "is_new_ip", "is_new_device",
@@ -16,6 +17,7 @@ FLAG_COLUMNS = [
 ]
 NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + [
     "login_frequency", "failed_logins_45m", "successful_logins_5m",
+    "distinct_failed_users_per_ip_15m",
 ]
 
 
@@ -144,6 +146,45 @@ def add_login_status_windows(df):
     return df
 
 
+
+def add_failed_users_per_ip_window(df):
+    """Count distinct usernames with failed logins from each IP in 15 minutes.
+
+    The window is inclusive and keyed by source IP rather than account, helping
+    surface password-spraying patterns across multiple accounts. Equal timestamps
+    are evaluated as a batch to avoid row-order-dependent counts.
+    """
+    window = pd.Timedelta(minutes=FAILED_SOURCE_USER_WINDOW_MINUTES)
+    counts = pd.Series(0, index=df.index, dtype="int64")
+    ordered = df.sort_values(["ip_address", "timestamp"], kind="stable")
+
+    for _, ip_group in ordered.groupby("ip_address", sort=False):
+        prior_failures = []
+        for _, batch in ip_group.groupby("timestamp", sort=True):
+            current = batch["timestamp"].iloc[0]
+            prior_failures = [
+                (timestamp, username)
+                for timestamp, username in prior_failures
+                if current - timestamp <= window
+            ]
+            current_failed_users = set(
+                batch.loc[batch["login_status"] == "failed", "username"].tolist()
+            )
+            distinct_users = {username for _, username in prior_failures}
+            distinct_users.update(current_failed_users)
+            counts.loc[batch.index] = len(distinct_users)
+
+            prior_failures.extend(
+                (current, username)
+                for username in batch.loc[
+                    batch["login_status"] == "failed", "username"
+                ].tolist()
+            )
+
+    df["distinct_failed_users_per_ip_15m"] = counts
+    return df
+
+
 def build_features(df):
     """Add all model features using strictly historical, timestamp-safe baselines."""
     df = df.copy()
@@ -155,6 +196,7 @@ def build_features(df):
     df = add_location_change(df)
     df = add_login_frequency(df)
     df = add_login_status_windows(df)
+    df = add_failed_users_per_ip_window(df)
     return df
 
 def main():
