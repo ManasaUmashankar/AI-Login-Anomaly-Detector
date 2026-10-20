@@ -227,6 +227,8 @@ AI-Login-Anomaly-Detector/
 │   ├── feature_engineering.py   # turns logs into features
 │   ├── detection_rules.py       # rules and risk scoring
 │   ├── anomaly_detector.py      # Isolation Forest and combined pipeline
+│   ├── audit_label_alignment.py # audits rule/label overlap
+│   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
 │   └── utils.py                 # shared file paths
 ├── models/
 │   └── anomaly_model.pkl
@@ -234,7 +236,8 @@ AI-Login-Anomaly-Detector/
 │   └── app.py
 ├── notebooks/                   # reserved for exploration notebooks
 ├── tests/
-│   └── test_detector.py
+│   ├── test_detector.py
+│   └── test_stress_test_evaluation.py
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -262,8 +265,9 @@ Run these from the project folder with the virtual environment active:
 python -m src.generate_dataset             # 1. create the synthetic logs
 python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
-python -m src.evaluate_model                # 4. evaluate on a later chronological holdout
-python -m streamlit run dashboard/app.py   # 4. open the dashboard
+python -m src.evaluate_model                # 4. evaluate chronological holdout windows
+python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
+python -m streamlit run dashboard/app.py   # 6. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
@@ -380,3 +384,18 @@ This report compares each individual risk signal and the combined risk-score bas
 **Why this matters:** the dataset generator creates anomalies through specific scenarios (repeated failures, unusual-hour logins from unfamiliar locations/devices, and rapid-login bursts). Several of the detector rules target those same scenario characteristics. Strong rule performance on this dataset may therefore reflect how its labels were constructed, rather than independent evidence that the rules will generalise to real authentication logs.
 
 Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger future evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
+
+
+## Controlled Edge-Case Stress Test
+
+Run a second, deliberately difficult evaluation separately from the original 1,588-row baseline:
+
+```bash
+python -m src.stress_test_evaluation
+```
+
+The stress test fits Isolation Forest on the historical synthetic logs only, then scores a separate set of 23 controlled scenarios. The set includes four **benign edge cases** (a new IP, new device, new location, or unusual login hour in isolation) and suspicious sequences that do not all bundle the same unfamiliar IP/device/location/hour signals: brute-force-style failures from familiar context, rapid successful logins from familiar context, low-and-slow failures, and a daytime login from a new IP and location.
+
+The script reports precision, recall, F1, false-positive rate, accuracy, confusion counts, and row-level predictions for both the ML detector and the risk-score baseline (score >= 3). Use the per-scenario rows to inspect false positives on benign activity and misses on suspicious activity.
+
+**Important evaluation caveat:** the stress set is small and hand-designed, and its labels are assumptions for testing, not objective truth. It is intended to expose blind spots and help guide further test design—not to establish real-world detection performance. It is separate from the original dataset and does not change the baseline labels or its reported results.
