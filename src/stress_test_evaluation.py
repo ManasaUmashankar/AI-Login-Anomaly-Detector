@@ -95,6 +95,23 @@ def build_stress_scenarios(history):
             scenario="benign_successes_spread_out",
         )
 
+    # Hard negatives: legitimate-looking activity that resembles suspicious patterns.
+    # These are deliberately ambiguous test labels, not claims that such behaviour is always benign.
+    for attempt in range(6):
+        emit(
+            p0, minutes=150, seconds=attempt * 8, status="success",
+            label="normal", scenario="benign_rapid_success_familiar_context",
+        )
+    for attempt in range(6):
+        emit(
+            p1, minutes=160 + attempt * 7, status="failed", failures=attempt + 1,
+            label="normal", scenario="benign_low_and_slow_failures",
+        )
+    emit(
+        p3, minutes=220, device="Temporary Work Laptop", location="Jaipur, India",
+        label="normal", scenario="benign_new_device_and_location_daytime",
+    )
+
     # Suspicious activity with otherwise familiar context.
     for attempt in range(1, 7):
         emit(
