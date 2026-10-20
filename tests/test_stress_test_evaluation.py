@@ -31,13 +31,16 @@ def test_stress_scenarios_keep_benign_and_anomaly_labels_separate():
     stress = build_stress_scenarios(make_history())
 
     assert len(stress) == 43
-    assert set(stress["true_label"]) == {"normal", "anomaly"}
+    assert set(stress["true_label"]) == {"normal", "anomaly", "ambiguous"}
     benign = stress[stress["scenario"].str.startswith("benign_")]
+    ambiguous = stress[stress["scenario"].str.startswith("ambiguous_")]
     suspicious = stress[stress["scenario"].str.startswith("anomaly_")]
-    assert len(benign) == 23
+    assert len(benign) == 10
+    assert len(ambiguous) == 13
     assert len(suspicious) == 20
-    assert (benign["true_label"] == "normal").all()
-    assert (suspicious["true_label"] == "anomaly").all()
+    assert benign["true_label"].eq("normal").all()
+    assert ambiguous["true_label"].eq("ambiguous").all()
+    assert suspicious["true_label"].eq("anomaly").all()
 
 
 def test_stress_set_includes_single_signal_benign_edge_cases():
@@ -83,18 +86,18 @@ def test_stress_set_includes_spaced_benign_successes_and_daytime_contextual_anom
 def test_stress_set_includes_hard_negative_benign_scenarios():
     stress = build_stress_scenarios(make_history())
 
-    rapid = stress[stress["scenario"] == "benign_rapid_success_familiar_context"]
-    low_slow = stress[stress["scenario"] == "benign_low_and_slow_failures"]
-    contextual = stress[stress["scenario"] == "benign_new_device_and_location_daytime"]
+    rapid = stress[stress["scenario"] == "ambiguous_rapid_success_familiar_context"]
+    low_slow = stress[stress["scenario"] == "ambiguous_low_and_slow_failures"]
+    contextual = stress[stress["scenario"] == "ambiguous_new_device_and_location_daytime"]
 
     assert len(rapid) == 6
     assert rapid["login_status"].eq("success").all()
-    assert rapid["true_label"].eq("normal").all()
+    assert rapid["true_label"].eq("ambiguous").all()
     assert len(low_slow) == 6
     assert low_slow["login_status"].eq("failed").all()
-    assert low_slow["true_label"].eq("normal").all()
+    assert low_slow["true_label"].eq("ambiguous").all()
     assert len(contextual) == 1
-    assert contextual.iloc[0]["true_label"] == "normal"
+    assert contextual.iloc[0]["true_label"] == "ambiguous"
 
 
 def test_scenario_evaluation_reports_detection_and_first_alert_position():
@@ -120,6 +123,26 @@ def test_scenario_evaluation_reports_detection_and_first_alert_position():
     assert metrics["rule"]["false_positive_rate"] == 0.0
     assert metrics["ml"]["false_positive_rate"] == 0.0
 
+
+
+def test_ambiguous_scenarios_are_excluded_from_binary_metrics_but_reported():
+    rows = pd.DataFrame([
+        {"scenario": "clear_benign", "true_label": "normal",
+         "rule_prediction": "normal", "ml_prediction": "normal"},
+        {"scenario": "clear_attack", "true_label": "anomaly",
+         "rule_prediction": "anomaly", "ml_prediction": "normal"},
+        {"scenario": "uncertain", "true_label": "ambiguous",
+         "rule_prediction": "anomaly", "ml_prediction": "normal"},
+    ])
+
+    metrics, scenarios = evaluate_scenario_detection(rows)
+    assert metrics["rule"]["tp"] == 1
+    assert metrics["rule"]["fp"] == 0
+    assert metrics["ml"]["fn"] == 1
+    ambiguous = scenarios.set_index("scenario").loc["uncertain"]
+    assert ambiguous["evaluation_scope"] == "ambiguous_review"
+    assert ambiguous["rule_detected"]
+    assert not ambiguous["ml_detected"]
 
 
 def test_stress_evaluation_returns_finite_model_scores_and_rolling_diagnostics():
