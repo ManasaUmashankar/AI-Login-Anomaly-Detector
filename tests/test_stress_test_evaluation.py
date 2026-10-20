@@ -30,11 +30,11 @@ def make_history():
 def test_stress_scenarios_keep_benign_and_anomaly_labels_separate():
     stress = build_stress_scenarios(make_history())
 
-    assert len(stress) == 30
+    assert len(stress) == 43
     assert set(stress["true_label"]) == {"normal", "anomaly"}
     benign = stress[stress["scenario"].str.startswith("benign_")]
     suspicious = stress[stress["scenario"].str.startswith("anomaly_")]
-    assert len(benign) == 10
+    assert len(benign) == 23
     assert len(suspicious) == 20
     assert (benign["true_label"] == "normal").all()
     assert (suspicious["true_label"] == "anomaly").all()
@@ -77,6 +77,24 @@ def test_stress_set_includes_spaced_benign_successes_and_daytime_contextual_anom
     assert contextual.iloc[0]["true_label"] == "anomaly"
     assert contextual.iloc[0]["device"] == "Temporary Work Laptop"
     assert contextual.iloc[0]["location"] == "Jaipur, India"
+
+
+
+def test_stress_set_includes_hard_negative_benign_scenarios():
+    stress = build_stress_scenarios(make_history())
+
+    rapid = stress[stress["scenario"] == "benign_rapid_success_familiar_context"]
+    low_slow = stress[stress["scenario"] == "benign_low_and_slow_failures"]
+    contextual = stress[stress["scenario"] == "benign_new_device_and_location_daytime"]
+
+    assert len(rapid) == 6
+    assert rapid["login_status"].eq("success").all()
+    assert rapid["true_label"].eq("normal").all()
+    assert len(low_slow) == 6
+    assert low_slow["login_status"].eq("failed").all()
+    assert low_slow["true_label"].eq("normal").all()
+    assert len(contextual) == 1
+    assert contextual.iloc[0]["true_label"] == "normal"
 
 
 def test_scenario_evaluation_reports_detection_and_first_alert_position():
