@@ -109,12 +109,12 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
 
 def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
     """Evaluate consecutive future windows with an expanding training history."""
-    if "true_label" not in df.columns:
-        raise ValueError("Dataset must contain a true_label column for evaluation.")
-    if not 0.30 <= train_fraction < 0.90:
-        raise ValueError("train_fraction must be at least 0.30 and less than 0.90.")
     if not isinstance(windows, int) or windows < 2:
         raise ValueError("windows must be an integer of at least 2.")
+    if not 0.30 <= train_fraction < 0.90:
+        raise ValueError("train_fraction must be at least 0.30 and less than 0.90.")
+    if "true_label" not in df.columns:
+        raise ValueError("Dataset must contain a true_label column for evaluation.")
 
     working = df.copy()
     working["timestamp"] = pd.to_datetime(working["timestamp"], errors="coerce")
