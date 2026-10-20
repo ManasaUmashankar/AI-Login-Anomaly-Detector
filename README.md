@@ -278,14 +278,9 @@ After step 4 above, open `http://localhost:8501`.
 
 ## Example Output
 
-```text
-Final status counts
-  Normal activity            1495
-  Requires investigation       88
-  Potentially suspicious        5
-```
+Exact counts depend on the dataset and the current feature/model version. The pipeline prints final-status counts, a risk-level breakdown, and the highest-priority events. Run `python -m src.evaluate_model` to calculate precision, recall, and F1 against the synthetic dataset's `true_label` column.
 
-An example row from the results:
+An illustrative alert row may look like this (values are an example, not a performance benchmark):
 
 ```text
 2026-09-03 22:22:24 | diana | 198.51.100.23 | Sao Paulo, Brazil | Unknown Device
@@ -295,7 +290,7 @@ New IP address at an unusual hour; New device from an unusual location;
 Rapid login attempts; Statistically unusual pattern (ML)
 ```
 
-Of the 88 rule-flagged rows, the model also flagged 75 and missed 13. It flagged 5 other rows that no rule caught, which become "Potentially suspicious". This shows why the two methods complement each other.
+The dataset contains planted synthetic scenarios. Performance on those scenarios is useful for testing the code, but it does not predict performance on real authentication logs.
 
 ## Testing
 
