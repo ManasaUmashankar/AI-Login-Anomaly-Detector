@@ -158,6 +158,17 @@ def test_rapid_success_burst_is_flagged_without_unfamiliar_context():
     assert "Rapid successful login burst" in burst["detection_reasons"]
     assert burst["risk_score"] >= 3
 
+def test_low_and_slow_failures_trigger_before_the_sequence_ends():
+    rows = baseline_rows() + [
+        make_row(f"2026-09-15 14:{minute:02d}:00", status="failed", failed=attempt)
+        for attempt, minute in enumerate((0, 7, 14, 21, 28, 35), start=1)
+    ]
+    result = analyse(rows)
+    sequence = result.iloc[-6:]
+    assert list(sequence["failed_logins_45m"]) == [1, 2, 3, 4, 5, 6]
+    assert (sequence.iloc[-2:]["risk_score"] >= 3).all()
+    assert sequence.iloc[-1]["risk_level"] == "Medium"
+
 
 # ---------- Detection rules ----------
 def test_normal_logins_trigger_no_rules():
