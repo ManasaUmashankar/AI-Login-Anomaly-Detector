@@ -163,7 +163,12 @@ def evaluate_stress_test(history=None):
         "ml": calculate_metrics(actual, ml_prediction),
         "rules": calculate_metrics(actual, rule_prediction),
     }
-    rows = stress_features[["scenario", "username", "timestamp", "true_label"]].copy()
+    diagnostic_columns = [
+        "scenario", "username", "timestamp", "true_label",
+        "failed_logins_45m", "successful_logins_5m", "login_frequency",
+        "is_new_ip", "is_new_device", "is_unusual_location", "location_change",
+    ]
+    rows = stress_features[diagnostic_columns].copy()
     rows["risk_score"] = rules["risk_score"].to_numpy()
     rows["rule_prediction"] = rule_prediction.to_numpy()
     rows["ml_prediction"] = ml_prediction.to_numpy()
@@ -248,10 +253,14 @@ def main():
     print(display_rows.to_string(index=False))
 
     print("\nPer-event outcomes:")
-    print(rows[[
-        "scenario", "true_label", "risk_score", "rule_prediction",
+    display_events = rows[[
+        "scenario", "true_label", "failed_logins_45m", "successful_logins_5m",
+        "login_frequency", "is_new_ip", "is_new_device", "is_unusual_location",
+        "location_change", "risk_score", "ml_anomaly_score", "rule_prediction",
         "ml_prediction", "rules_correct", "ml_correct",
-    ]].to_string(index=False))
+    ]].copy()
+    display_events["ml_anomaly_score"] = display_events["ml_anomaly_score"].round(4)
+    print(display_events.to_string(index=False))
     print(
         "\nInterpretation: inspect which benign edge cases are falsely flagged and which "
         "suspicious sequences are missed. The stress set is intentionally small and should "
