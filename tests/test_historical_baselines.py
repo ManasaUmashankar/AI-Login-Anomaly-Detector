@@ -65,3 +65,26 @@ def test_same_timestamp_events_do_not_set_baselines_for_each_other():
     # must not make one of the two values look established or anomalous.
     for column in DIFFERENCE_FLAGS:
         assert features[column].tolist() == [0, 0]
+
+
+
+def test_simultaneous_events_have_order_independent_frequency_and_location_features():
+    prior = make_row("2026-09-20 10:00:00", USUAL, username="alice")
+    simultaneous = [
+        make_row("2026-09-20 10:01:00", USUAL, username="alice"),
+        make_row("2026-09-20 10:01:00", ODD, username="alice"),
+    ]
+
+    forward = build_features(make_logs([prior] + simultaneous))
+    reverse = build_features(make_logs([prior] + list(reversed(simultaneous)))
+
+    def by_event(frame):
+        return {
+            (row["timestamp"], row["ip_address"]): (
+                row["login_frequency"], row["location_change"]
+            )
+            for _, row in frame.iterrows()
+        }
+
+    assert by_event(forward) == by_event(reverse)
+    assert forward.loc[forward["timestamp"] == pd.Timestamp("2026-09-20 10:01:00"), "login_frequency"].tolist() == [3, 3]
