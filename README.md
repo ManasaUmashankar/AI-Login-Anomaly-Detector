@@ -72,8 +72,8 @@ Each of these is a **signal**, not proof. New IPs, new devices, VPNs, and travel
 
 - Synthetic login dataset with normal and suspicious behaviour
 - Data preprocessing and validation (missing values, duplicates, timestamps, inconsistent values)
-- Feature engineering (hour, unusual hour, new IP, new device, unusual location, location change, login frequency)
-- Five explainable detection rules with readable reasons
+- Feature engineering (hour, unusual hour, new IP, new device, unusual location, location change, login frequency, rolling failed/successful login windows)
+- Explainable point-in-time rules plus sequence-aware detection for repeated failures and rapid successful-login bursts
 - Project-specific risk score with Low, Medium, and High levels
 - Isolation Forest anomaly detection with a saved model
 - Combined final status for every login
@@ -158,6 +158,8 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | New IP address at an unusual hour | IP differs from the user's usual, and the hour is before 06:00 or from 22:00 |
 | New device from an unusual location | Device and location both differ from the user's usual |
 | Rapid login attempts | 5 or more attempts by one user within 5 minutes |
+| Repeated failed logins within 45 minutes | 5 or more failed events in the trailing 45-minute window |
+| Rapid successful login burst | 5 or more successful events in the trailing 5-minute window |
 
 Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the most common IP, device, and location in earlier login history only. Events with the same timestamp share one baseline, and a user's first observed timestamp has no historical baseline yet.
 
@@ -172,6 +174,8 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | Unusual login location | +2 |
 | Rapid login attempts | +2 |
 | Unusual login hour | +1 |
+| Repeated failures within 45 minutes | +3 |
+| Rapid successful logins within 5 minutes | +3 |
 
 | Total score | Level |
 |---|---|
@@ -179,7 +183,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | 3 to 5 | Medium |
 | 6 and above | High |
 
-The highest possible score is 13.
+The highest possible score is 19. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
 
 > **These points and levels are project-specific design choices, not cybersecurity standards.** They exist to rank alerts. SOC analysts have limited time, and not every alert has the same severity, so scoring helps them look at the most serious events first.
 
@@ -317,6 +321,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 |---|---|
 | Synthetic dataset | The planted attacks are easy to separate from normal data, so results look better than real-world results would. |
 | Limited features | Only a handful of simple signals are used. Real systems use many more. |
+| Sequence windows | The 45-minute failure and 5-minute success windows are project-specific choices and need tuning against broader datasets. |
 | False positives | VPNs, travel, new phones, and late work can all look suspicious. |
 | False negatives | A slow attacker ("low and slow") can stay below the thresholds. The model can miss real attacks too. |
 | VPN and proxy effects | They can hide or fake the IP and location. |
@@ -338,6 +343,7 @@ A production system would improve these with real log ingestion, per-user baseli
 - Splunk or other SIEM integration
 - Real-time monitoring
 - Email or chat alert notifications
+- Tune sequence windows against diverse benign and malicious scenarios
 - Better behavioural baselines per user
 - More advanced anomaly detection methods
 - Scheduled model retraining
