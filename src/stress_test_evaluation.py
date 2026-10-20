@@ -211,7 +211,8 @@ def evaluate_stress_test(history=None):
     }
     diagnostic_columns = [
         "scenario", "username", "timestamp", "true_label",
-        "failed_logins_45m", "successful_logins_5m", "login_frequency",
+        "failed_logins_45m", "successful_logins_5m",
+        "distinct_failed_users_per_ip_15m", "login_frequency",
         "is_new_ip", "is_new_device", "is_unusual_location", "location_change",
     ]
     rows = stress_features[diagnostic_columns].copy()
