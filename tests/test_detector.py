@@ -161,6 +161,43 @@ def test_rapid_success_burst_is_flagged_without_unfamiliar_context():
     assert "Rapid successful login burst" in burst["detection_reasons"]
     assert burst["risk_score"] >= 3
 
+def test_cross_account_failure_window_detects_password_spray_pattern():
+    rows = baseline_rows()
+    for attempt, username in enumerate(("alice", "bob", "cara", "dan"), start=1):
+        row = make_row(
+            f"2026-09-15 14:00:{attempt * 8:02d}",
+            status="failed",
+            failed=1,
+        )
+        row[1] = username
+        row[2] = "198.51.100.203"
+        rows.append(row)
+
+    result = analyse(rows)
+    sequence = result.iloc[-4:]
+    assert list(sequence["distinct_failed_users_per_ip_15m"]) == [1, 2, 3, 4]
+    assert "Failed logins against multiple accounts from one source" in (
+        sequence.iloc[-1]["detection_reasons"]
+    )
+    assert sequence.iloc[-1]["risk_score"] >= 3
+
+
+def test_cross_account_failure_window_does_not_mix_source_ips():
+    rows = []
+    for attempt, username in enumerate(("alice", "bob", "cara", "dan"), start=1):
+        row = make_row(
+            f"2026-09-15 14:00:{attempt * 8:02d}",
+            status="failed",
+            failed=1,
+        )
+        row[1] = username
+        row[2] = f"198.51.100.{200 + attempt}"
+        rows.append(row)
+
+    features = build_features(make_logs(rows))
+    assert list(features["distinct_failed_users_per_ip_15m"]) == [1, 1, 1, 1]
+
+
 def test_low_and_slow_failures_trigger_before_the_sequence_ends():
     rows = baseline_rows() + [
         make_row(f"2026-09-15 14:{minute:02d}:00", status="failed", failed=attempt)
