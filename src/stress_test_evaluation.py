@@ -87,6 +87,14 @@ def build_stress_scenarios(history):
     emit(p2, minutes=3, location="Jaipur, India", scenario="benign_new_location_only")
     emit(p3, minutes=-420, scenario="benign_off_hours_only")
 
+    # A legitimate user may have several successful logins over a longer period.
+    # Six-minute gaps should not trigger the five-minute rapid-success rule.
+    for attempt in range(1, 7):
+        emit(
+            p0, minutes=100 + attempt * 6, status="success",
+            scenario="benign_successes_spread_out",
+        )
+
     # Suspicious activity with otherwise familiar context.
     for attempt in range(1, 7):
         emit(
@@ -111,6 +119,12 @@ def build_stress_scenarios(history):
     emit(
         p3, minutes=80, ip="198.51.100.202", location="Jaipur, India",
         label="anomaly", scenario="anomaly_new_ip_and_location_daytime",
+    )
+
+    # A new device and location during daytime, without changing the IP.
+    emit(
+        p3, minutes=90, device="Temporary Work Laptop", location="Jaipur, India",
+        label="anomaly", scenario="anomaly_new_device_and_location_daytime",
     )
 
     result = pd.DataFrame(rows, columns=STRESS_COLUMNS + ["scenario"])
