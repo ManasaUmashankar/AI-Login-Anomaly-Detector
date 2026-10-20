@@ -26,12 +26,32 @@ def add_time_features(df):
 
 
 def add_difference_from_usual(df, column, new_name):
-    """1 if this row's value differs from the user's most common value."""
-    usual = df.groupby("username")[column].agg(lambda values: values.mode().iloc[0])
-    usual_for_each_row = df["username"].map(usual)
-    df[new_name] = (df[column] != usual_for_each_row).astype(int)
-    return df
+    """Compare a value with the most common value at strictly earlier timestamps.
 
+    Events sharing a timestamp use the same baseline, so they cannot establish
+    a baseline for one another. A user's first observed timestamp has no
+    historical baseline; difference flags remain 0 until prior history exists.
+    """
+    flags = pd.Series(0, index=df.index, dtype="int64")
+    ordered = df.sort_values("timestamp", kind="stable")
+
+    for _, user_group in ordered.groupby("username", sort=False):
+        history = {}
+        # Process equal timestamps as a batch to avoid order-dependent leakage.
+        for _, batch in user_group.groupby("timestamp", sort=True):
+            if history:
+                # dict insertion order gives deterministic first-seen tie-breaking.
+                usual_value = max(history, key=history.get)
+                flags.loc[batch.index] = (
+                    batch[column] != usual_value
+                ).astype("int64")
+
+            # Only make this timestamp available to later events.
+            for value in batch[column].tolist():
+                history[value] = history.get(value, 0) + 1
+
+    df[new_name] = flags
+    return df
 
 def add_location_change(df):
     """1 if location differs from the same user's previous login."""
