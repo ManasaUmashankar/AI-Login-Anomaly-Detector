@@ -7,12 +7,16 @@ from src.read_dataset import load_logs
 UNUSUAL_BEFORE_HOUR = 6        # logins before 06:00 count as unusual
 UNUSUAL_FROM_HOUR = 22         # logins from 22:00 onward count as unusual
 FREQUENCY_WINDOW_MINUTES = 5   # window for counting recent logins
+FAILED_LOGIN_WINDOW_MINUTES = 45  # rolling window for repeated failed-login events
+SUCCESS_LOGIN_WINDOW_MINUTES = 5  # rolling window for rapid successful logins
 
 FLAG_COLUMNS = [
     "is_unusual_hour", "is_new_ip", "is_new_device",
     "is_unusual_location", "location_change",
 ]
-NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + ["login_frequency"]
+NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + [
+    "login_frequency", "failed_logins_45m", "successful_logins_5m",
+]
 
 
 def add_time_features(df):
@@ -103,6 +107,43 @@ def add_login_frequency(df):
     return df
 
 
+def add_login_status_windows(df):
+    """Count failed and successful events in inclusive rolling windows per user.
+
+    Equal-timestamp events are evaluated as a batch, so their feature values do
+    not depend on row order. Counts include the current timestamp batch.
+    """
+    failed_window = pd.Timedelta(minutes=FAILED_LOGIN_WINDOW_MINUTES)
+    success_window = pd.Timedelta(minutes=SUCCESS_LOGIN_WINDOW_MINUTES)
+    failed_counts = pd.Series(0, index=df.index, dtype="int64")
+    success_counts = pd.Series(0, index=df.index, dtype="int64")
+    ordered = df.sort_values(["username", "timestamp"], kind="stable")
+
+    for _, user_group in ordered.groupby("username", sort=False):
+        prior_failed = []
+        prior_success = []
+        for _, batch in user_group.groupby("timestamp", sort=True):
+            current = batch["timestamp"].iloc[0]
+            prior_failed = [
+                timestamp for timestamp in prior_failed
+                if current - timestamp <= failed_window
+            ]
+            prior_success = [
+                timestamp for timestamp in prior_success
+                if current - timestamp <= success_window
+            ]
+            batch_failed = batch.loc[batch["login_status"] == "failed", "timestamp"].tolist()
+            batch_success = batch.loc[batch["login_status"] == "success", "timestamp"].tolist()
+            failed_counts.loc[batch.index] = len(prior_failed) + len(batch_failed)
+            success_counts.loc[batch.index] = len(prior_success) + len(batch_success)
+            prior_failed.extend(batch_failed)
+            prior_success.extend(batch_success)
+
+    df["failed_logins_45m"] = failed_counts
+    df["successful_logins_5m"] = success_counts
+    return df
+
+
 def build_features(df):
     """Add all model features using strictly historical, timestamp-safe baselines."""
     df = df.copy()
@@ -113,6 +154,7 @@ def build_features(df):
     df = add_difference_from_usual(df, "location", "is_unusual_location")
     df = add_location_change(df)
     df = add_login_frequency(df)
+    df = add_login_status_windows(df)
     return df
 
 def main():
