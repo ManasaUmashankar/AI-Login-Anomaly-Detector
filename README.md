@@ -252,7 +252,7 @@ AI-Login-Anomaly-Detector/
 Requires Python 3.10 or newer and Git.
 
 ```powershell
-git clone https://github.com/your-username/AI-Login-Anomaly-Detector.git
+git clone https://github.com/ManasaUmashankar/AI-Login-Anomaly-Detector.git
 cd AI-Login-Anomaly-Detector
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
