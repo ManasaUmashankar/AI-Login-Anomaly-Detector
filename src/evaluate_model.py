@@ -1,121 +1,257 @@
 import pandas as pd
-
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
     confusion_matrix,
+    f1_score,
     precision_score,
     recall_score,
-    f1_score,
 )
 
+from src.anomaly_detector import MODEL_FEATURES, apply_model, train_model
+from src.detection_rules import apply_risk_scores, apply_rules
+from src.feature_engineering import build_features
+from src.preprocessing import preprocess_logs
 from src.read_dataset import load_logs
-from src.anomaly_detector import run_pipeline
 
 
-def main():
-    # 1. Load the original dataset, including ground-truth labels.
-    df = load_logs(include_labels=True)
-
-    if "true_label" not in df.columns:
-        raise ValueError(
-            "The dataset has no 'true_label' column. "
-            "Regenerate data/login_logs.csv using generate_dataset.py."
-        )
-
-    # 2. Normalize timestamps and labels.
-    df["timestamp"] = pd.to_datetime(
-        df["timestamp"], errors="coerce"
-    )
-
-    df = df.dropna(subset=["timestamp"])
-    df = df.sort_values("timestamp").reset_index(drop=True)
-
-    y_true = (
-        df["true_label"]
+def normalize_labels(labels):
+    """Normalize synthetic ground-truth labels to normal/anomaly."""
+    normalized = (
+        pd.Series(labels)
         .astype(str)
         .str.strip()
         .str.lower()
         .map({"normal": "normal", "anomaly": "anomaly"})
     )
+    if normalized.isna().any():
+        values = pd.Series(labels).astype(str).unique().tolist()
+        raise ValueError(f"Unexpected true_label values: {values}")
+    return normalized.reset_index(drop=True)
 
-    if y_true.isna().any():
-        raise ValueError(
-            "Unexpected values found in true_label. "
-            f"Labels found: {df['true_label'].unique().tolist()}"
-        )
 
-    # 3. Run the complete detection pipeline.
-    print("\nRunning login anomaly detection...\n")
-    evaluation = run_pipeline()
+def calculate_metrics(y_true, y_pred):
+    """Calculate binary metrics with anomaly as the positive class."""
+    y_true = normalize_labels(y_true)
+    y_pred = normalize_labels(y_pred)
 
-    if "ml_result" not in evaluation.columns:
-        raise ValueError(
-            "Pipeline output is missing the 'ml_result' column."
-        )
+    if len(y_true) != len(y_pred):
+        raise ValueError("Actual labels and predictions must have the same length.")
+    if len(y_true) == 0:
+        raise ValueError("Cannot evaluate an empty holdout set.")
 
-    # 4. Check that actual labels and predictions align.
-    if len(y_true) != len(evaluation):
-        raise ValueError(
-            f"Row count mismatch: {len(y_true)} actual labels, "
-            f"but {len(evaluation)} predictions. "
-            "Check preprocessing and row ordering."
-        )
+    matrix = confusion_matrix(y_true, y_pred, labels=["normal", "anomaly"])
+    tn, fp, fn, tp = matrix.ravel()
+    return {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, pos_label="anomaly", zero_division=0),
+        "recall": recall_score(y_true, y_pred, pos_label="anomaly", zero_division=0),
+        "f1": f1_score(y_true, y_pred, pos_label="anomaly", zero_division=0),
+        "false_positive_rate": fp / (fp + tn) if (fp + tn) else 0.0,
+        "confusion_matrix": matrix,
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn),
+        "tp": int(tp),
+    }
 
-    # 5. Convert model predictions to the same label format.
-    y_pred = (
-        evaluation["ml_result"]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-        .map({"normal": "normal", "anomalous": "anomaly"})
+
+def _temporal_group_starts(features):
+    """Return row indices where a new timestamp group begins."""
+    timestamps = features["timestamp"].reset_index(drop=True)
+    if timestamps.empty:
+        return []
+    return [0] + [
+        index for index in range(1, len(timestamps))
+        if timestamps.iloc[index] != timestamps.iloc[index - 1]
+    ]
+
+
+def _choose_temporal_train_group(features, train_fraction, minimum_future_groups):
+    """Choose a row-count-near split without separating equal timestamps."""
+    group_starts = _temporal_group_starts(features)
+    candidates = [
+        group_index for group_index in range(1, len(group_starts))
+        if group_starts[group_index] >= 2
+        and len(group_starts) - group_index >= minimum_future_groups
+    ]
+    if not candidates:
+        raise ValueError("Not enough distinct timestamps for the requested temporal split.")
+    target_rows = len(features) * train_fraction
+    return min(candidates, key=lambda group_index: abs(group_starts[group_index] - target_rows))
+
+
+def evaluate_temporal_holdout(df, train_fraction=0.70):
+    """Train on earlier logins and evaluate only on later, unseen logins."""
+    if "true_label" not in df.columns:
+        raise ValueError("Dataset must contain a true_label column for evaluation.")
+    if not 0.5 <= train_fraction < 1.0:
+        raise ValueError("train_fraction must be at least 0.5 and less than 1.0.")
+
+    working = df.copy()
+    working["timestamp"] = pd.to_datetime(working["timestamp"], errors="coerce")
+    working = working.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    working["true_label"] = normalize_labels(working["true_label"]).values
+
+    # Keep the labels only for scoring; preprocessing preserves the optional label.
+    cleaned = preprocess_logs(working)
+    if len(cleaned) < 4:
+        raise ValueError("At least four valid login rows are required for a temporal holdout.")
+
+    features = build_features(cleaned)
+    group_starts = _temporal_group_starts(features)
+    train_group = _choose_temporal_train_group(
+        features, train_fraction, minimum_future_groups=1
     )
+    split_at = group_starts[train_group]
 
+    train_features = features.iloc[:split_at]
+    test_features = features.iloc[split_at:]
+
+    # Train only on the earlier period; never fit the model on holdout rows.
+    model = train_model(train_features)
+    predictions = apply_model(model, test_features)
+
+    y_true = normalize_labels(test_features["true_label"])
+    y_pred = predictions["ml_result"].astype(str).str.lower().map(
+        {"normal": "normal", "anomalous": "anomaly"}
+    )
     if y_pred.isna().any():
-        raise ValueError(
-            "Unexpected model prediction values: "
-            f"{evaluation['ml_result'].unique().tolist()}"
+        raise ValueError(f"Unexpected prediction values: {predictions['ml_result'].unique().tolist()}")
+
+    metrics = calculate_metrics(y_true, y_pred)
+    metadata = {
+        "total_rows": len(features),
+        "train_rows": len(train_features),
+        "test_rows": len(test_features),
+        "train_end": train_features["timestamp"].max(),
+        "test_start": test_features["timestamp"].min(),
+        "y_true": y_true,
+        "y_pred": y_pred.reset_index(drop=True),
+    }
+    return metrics, metadata
+
+
+
+def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
+    """Evaluate consecutive future windows with an expanding training history."""
+    if not isinstance(windows, int) or windows < 2:
+        raise ValueError("windows must be an integer of at least 2.")
+    if not 0.30 <= train_fraction < 0.90:
+        raise ValueError("train_fraction must be at least 0.30 and less than 0.90.")
+    if "true_label" not in df.columns:
+        raise ValueError("Dataset must contain a true_label column for evaluation.")
+
+    working = df.copy()
+    working["timestamp"] = pd.to_datetime(working["timestamp"], errors="coerce")
+    working = working.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    working["true_label"] = normalize_labels(working["true_label"]).values
+    cleaned = preprocess_logs(working)
+    features = build_features(cleaned)
+
+    group_starts = _temporal_group_starts(features)
+    initial_train_group = _choose_temporal_train_group(
+        features, train_fraction, minimum_future_groups=windows
+    )
+    remaining_groups = len(group_starts) - initial_train_group
+    boundaries = [
+        initial_train_group + (index * remaining_groups) // windows
+        for index in range(windows + 1)
+    ]
+
+    results = []
+    for index in range(windows):
+        test_start = group_starts[boundaries[index]]
+        test_end = (
+            group_starts[boundaries[index + 1]]
+            if boundaries[index + 1] < len(group_starts)
+            else len(features)
         )
 
-    # 6. Calculate evaluation metrics.
-    accuracy = accuracy_score(y_true, y_pred)
-    precision = precision_score(
-        y_true, y_pred, pos_label="anomaly", zero_division=0
-    )
-    recall = recall_score(
-        y_true, y_pred, pos_label="anomaly", zero_division=0
-    )
-    f1 = f1_score(
-        y_true, y_pred, pos_label="anomaly", zero_division=0
-    )
+        train_features = features.iloc[:test_start]
+        test_features = features.iloc[test_start:test_end]
+        model = train_model(train_features)
+        predictions = apply_model(model, test_features)
 
-    print("\n========== MODEL EVALUATION ==========")
-    print(f"Total evaluated logins: {len(y_true)}")
-    print(f"Actual anomalies:       {(y_true == 'anomaly').sum()}")
-    print(f"Predicted anomalies:    {(y_pred == 'anomaly').sum()}")
+        y_true = normalize_labels(test_features["true_label"])
+        y_pred = predictions["ml_result"].astype(str).str.lower().map(
+            {"normal": "normal", "anomalous": "anomaly"}
+        )
+        if y_pred.isna().any():
+            raise ValueError(
+                f"Unexpected prediction values: {predictions['ml_result'].unique().tolist()}"
+            )
 
-    print("\n========== PERFORMANCE METRICS ==========")
-    print(f"Accuracy:  {accuracy:.4f} ({accuracy * 100:.2f}%)")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall:    {recall:.4f}")
-    print(f"F1-score:  {f1:.4f}")
+        metrics = calculate_metrics(y_true, y_pred)
 
-    print("\n========== CONFUSION MATRIX ==========")
-    print("Labels: normal, anomaly")
-    print(confusion_matrix(
-        y_true, y_pred, labels=["normal", "anomaly"]
-    ))
+        # Compare the ML model with an explainable rule/risk-score baseline.
+        rule_results = apply_risk_scores(apply_rules(test_features.copy()))
+        baseline_pred = rule_results["risk_score"].ge(3).map(
+            {True: "anomaly", False: "normal"}
+        )
+        baseline_metrics = calculate_metrics(y_true, baseline_pred)
 
-    print("\n========== CLASSIFICATION REPORT ==========")
-    print(classification_report(
-        y_true,
-        y_pred,
-        labels=["normal", "anomaly"],
-        target_names=["Normal", "Anomaly"],
-        zero_division=0,
-    ))
+        results.append({
+            "window": index + 1,
+            "metrics": metrics,
+            "baseline_metrics": baseline_metrics,
+            "metadata": {
+                "train_rows": len(train_features),
+                "test_rows": len(test_features),
+                "train_end": train_features["timestamp"].max(),
+                "test_start": test_features["timestamp"].min(),
+                "test_end": test_features["timestamp"].max(),
+                "actual_anomalies": int((y_true == "anomaly").sum()),
+                "predicted_anomalies": int((y_pred == "anomaly").sum()),
+            },
+        })
 
-    print("Evaluation completed.")
+    return results
+
+
+def print_temporal_window_report(results):
+    """Print per-window metrics and an unweighted mean across windows."""
+    metric_names = ("precision", "recall", "f1", "false_positive_rate", "accuracy")
+    print("\n========== MULTI-WINDOW TEMPORAL EVALUATION ==========")
+    print("Each window is evaluated using a model trained only on earlier rows.")
+    print("All results are from synthetic data and are not a real-world benchmark.")
+
+    for result in results:
+        metrics = result["metrics"]
+        meta = result["metadata"]
+        print(f"\nWindow {result['window']}")
+        print(f"  Training rows: {meta['train_rows']} (through {meta['train_end']})")
+        print(f"  Holdout rows:  {meta['test_rows']} ({meta['test_start']} to {meta['test_end']})")
+        print(f"  Actual anomalies: {meta['actual_anomalies']}")
+        print(f"  Predicted anomalies: {meta['predicted_anomalies']}")
+        print(
+            "  Precision: {precision:.4f} | Recall: {recall:.4f} | "
+            "F1: {f1:.4f} | FPR: {false_positive_rate:.4f} | "
+            "Accuracy: {accuracy:.4f}".format(**metrics)
+        )
+        print("  Confusion matrix [actual normal, anomaly] x [predicted normal, anomaly]:")
+        print(metrics["confusion_matrix"])
+        baseline = result["baseline_metrics"]
+        print(
+            "  Rule baseline (risk score >= 3): "
+            f"Precision {baseline['precision']:.4f} | Recall {baseline['recall']:.4f} | "
+            f"F1 {baseline['f1']:.4f} | FPR {baseline['false_positive_rate']:.4f}"
+        )
+
+    print("\n========== UNWEIGHTED MEAN ACROSS WINDOWS ==========")
+    for name in metric_names:
+        mean_value = sum(item["metrics"][name] for item in results) / len(results)
+        baseline_mean = sum(item["baseline_metrics"][name] for item in results) / len(results)
+        print(
+            f"{name.replace('_', ' ').title():22s} "
+            f"ML {mean_value:.4f} | Rule baseline {baseline_mean:.4f}"
+        )
+
+
+def main():
+    df = load_logs(include_labels=True)
+    results = evaluate_temporal_windows(df, train_fraction=0.40, windows=4)
+    print_temporal_window_report(results)
 
 
 if __name__ == "__main__":

@@ -72,8 +72,8 @@ Each of these is a **signal**, not proof. New IPs, new devices, VPNs, and travel
 
 - Synthetic login dataset with normal and suspicious behaviour
 - Data preprocessing and validation (missing values, duplicates, timestamps, inconsistent values)
-- Feature engineering (hour, unusual hour, new IP, new device, unusual location, location change, login frequency)
-- Five explainable detection rules with readable reasons
+- Feature engineering (hour, unusual hour, new IP, new device, unusual location, location change, login frequency, rolling failed/successful login windows)
+- Explainable point-in-time rules plus sequence-aware detection for repeated failures and rapid successful-login bursts
 - Project-specific risk score with Low, Medium, and High levels
 - Isolation Forest anomaly detection with a saved model
 - Combined final status for every login
@@ -92,7 +92,7 @@ data/login_logs.csv
               |                            |
               v                            v
    Rules + Risk scoring             Isolation Forest
-   (explainable)                    (behavioural anomaly)F
+   (explainable)                    (behavioural anomaly)
               |                            |
               +-------------+--------------+
                             v
@@ -158,8 +158,10 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | New IP address at an unusual hour | IP differs from the user's usual, and the hour is before 06:00 or from 22:00 |
 | New device from an unusual location | Device and location both differ from the user's usual |
 | Rapid login attempts | 5 or more attempts by one user within 5 minutes |
+| Repeated failed logins within 45 minutes | 5 or more failed events in the trailing 45-minute window |
+| Rapid successful login burst | 5 or more successful events in the trailing 5-minute window |
 
-Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the user's most common IP, device, and location in the data.
+Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the most common IP, device, and location in earlier login history only. Events with the same timestamp share one baseline, and a user's first observed timestamp has no historical baseline yet.
 
 ### Risk scoring
 
@@ -172,6 +174,8 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | Unusual login location | +2 |
 | Rapid login attempts | +2 |
 | Unusual login hour | +1 |
+| Repeated failures within 45 minutes | +3 |
+| Rapid successful logins within 5 minutes | +3 |
 
 | Total score | Level |
 |---|---|
@@ -179,7 +183,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | 3 to 5 | Medium |
 | 6 and above | High |
 
-The highest possible score is 13.
+The highest possible score is 19. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
 
 > **These points and levels are project-specific design choices, not cybersecurity standards.** They exist to rank alerts. SOC analysts have limited time, and not every alert has the same severity, so scoring helps them look at the most serious events first.
 
@@ -187,9 +191,9 @@ The highest possible score is 13.
 
 The project uses **unsupervised learning**: the model is trained without labels, because in real environments labelled attacks are rare and attack patterns keep changing. The planted suspicious rows are used only afterwards to sanity-check results.
 
-The model only sees these eight numeric features: `login_hour`, `failed_attempts`, `is_new_ip`, `is_new_device`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, and `location_change`.
+The model sees ten numeric features: `login_hour`, `failed_attempts`, `is_new_ip`, `is_new_device`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. The last two expose recent failure and success bursts directly to the model, rather than leaving those patterns to the rule layer alone. They are project-specific rolling windows, not proof of malicious intent.
 
-The trained model is saved with Joblib to `models/anomaly_model.pkl`, so the dashboard can load it instead of retraining every time.
+The trained model is saved with Joblib to `models/anomaly_model_v3.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
 
 > `.pkl` (pickle) files can run code when loaded. Only load model files from sources you trust.
 
@@ -227,14 +231,17 @@ AI-Login-Anomaly-Detector/
 │   ├── feature_engineering.py   # turns logs into features
 │   ├── detection_rules.py       # rules and risk scoring
 │   ├── anomaly_detector.py      # Isolation Forest and combined pipeline
+│   ├── audit_label_alignment.py # audits rule/label overlap
+│   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
 │   └── utils.py                 # shared file paths
 ├── models/
-│   └── anomaly_model.pkl
+│   └── anomaly_model_v3.pkl
 ├── dashboard/
 │   └── app.py
 ├── notebooks/                   # reserved for exploration notebooks
 ├── tests/
-│   └── test_detector.py
+│   ├── test_detector.py
+│   └── test_stress_test_evaluation.py
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -262,7 +269,9 @@ Run these from the project folder with the virtual environment active:
 python -m src.generate_dataset             # 1. create the synthetic logs
 python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
-python -m streamlit run dashboard/app.py   # 4. open the dashboard
+python -m src.evaluate_model                # 4. evaluate chronological holdout windows
+python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
+python -m streamlit run dashboard/app.py   # 6. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
@@ -278,14 +287,9 @@ After step 4 above, open `http://localhost:8501`.
 
 ## Example Output
 
-```text
-Final status counts
-  Normal activity            1495
-  Requires investigation       88
-  Potentially suspicious        5
-```
+Exact counts depend on the dataset and the current feature/model version. The pipeline prints final-status counts, a risk-level breakdown, and the highest-priority events. Run `python -m src.evaluate_model` to calculate precision, recall, and F1 against the synthetic dataset's `true_label` column.
 
-An example row from the results:
+An illustrative alert row may look like this (values are an example, not a performance benchmark):
 
 ```text
 2026-09-03 22:22:24 | diana | 198.51.100.23 | Sao Paulo, Brazil | Unknown Device
@@ -295,7 +299,13 @@ New IP address at an unusual hour; New device from an unusual location;
 Rapid login attempts; Statistically unusual pattern (ML)
 ```
 
-Of the 88 rule-flagged rows, the model also flagged 75 and missed 13. It flagged 5 other rows that no rule caught, which become "Potentially suspicious". This shows why the two methods complement each other.
+The dataset contains planted synthetic scenarios. Performance on those scenarios is useful for testing the code, but it does not predict performance on real authentication logs.
+
+## Model Evaluation
+
+Run `python -m src.evaluate_model` to perform **four chronological holdout windows**. The model starts with the earliest 40% of valid login events, then evaluates consecutive later windows while expanding the training history. Each window reports precision, recall, F1-score, false-positive rate, accuracy, and a confusion matrix. The report also compares Isolation Forest with a simple explainable rule-based baseline that flags rows with a risk score of 3 or higher.
+
+The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
 ## Testing
 
@@ -311,6 +321,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 |---|---|
 | Synthetic dataset | The planted attacks are easy to separate from normal data, so results look better than real-world results would. |
 | Limited features | Only a handful of simple signals are used. Real systems use many more. |
+| Sequence windows | The 45-minute failure and 5-minute success windows are project-specific choices and need tuning against broader datasets. |
 | False positives | VPNs, travel, new phones, and late work can all look suspicious. |
 | False negatives | A slow attacker ("low and slow") can stay below the thresholds. The model can miss real attacks too. |
 | VPN and proxy effects | They can hide or fake the IP and location. |
@@ -319,7 +330,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 | Changing user behaviour and model drift | Habits change over time, so the baseline and model need regular updates. |
 | Project-specific thresholds | Scores, levels, and thresholds are design choices, not standards. |
 | Guessed `contamination` | The share of anomalies is assumed, not discovered. |
-| Baseline built from the whole dataset | A real system should use only past logins, and an attacker flooding an account could distort a "usual" baseline. |
+| Cumulative historical baseline | Future events no longer influence past features, but repeated suspicious events can eventually shift the most-common value; production systems need trusted or rolling baselines. |
 | Generated failure counter | `failed_attempts` is recorded by our generator. Real logs require the system to count recent failures itself. |
 | `location_change` is noisy | It also fires when a user returns to their normal location, so it is not used as a rule on its own. |
 | No real infrastructure | There is no real authentication system and no production-scale log ingestion. |
@@ -332,6 +343,8 @@ A production system would improve these with real log ingestion, per-user baseli
 - Splunk or other SIEM integration
 - Real-time monitoring
 - Email or chat alert notifications
+- Tune sequence windows against diverse benign and malicious scenarios
+- Add cross-account password-spraying correlation while reviewing shared-network false positives
 - Better behavioural baselines per user
 - More advanced anomaly detection methods
 - Scheduled model retraining
@@ -364,3 +377,32 @@ It is **much simpler** than a real SIEM such as Splunk. It does not collect live
 ## Disclaimer
 
 This is an educational cybersecurity project focused on **defensive security**: detection, monitoring, and analysis. It uses synthetic data only. It does not contain instructions for attacking real systems, stealing credentials, or bypassing authentication. Results must not be treated as proof of malicious activity, and the project is not suitable for production use.
+
+## Synthetic Label / Rule Alignment Audit
+
+Run the audit from the repository root:
+
+```bash
+python -m src.audit_label_alignment
+```
+
+This report compares each individual risk signal and the combined risk-score baseline against `true_label`, including precision, recall, F1, false-positive rate, accuracy, and anomaly rate by risk score.
+
+**Why this matters:** the dataset generator creates anomalies through specific scenarios (repeated failures, unusual-hour logins from unfamiliar locations/devices, and rapid-login bursts). Several of the detector rules target those same scenario characteristics. Strong rule performance on this dataset may therefore reflect how its labels were constructed, rather than independent evidence that the rules will generalise to real authentication logs.
+
+Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger future evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
+
+
+## Controlled Edge-Case Stress Test
+
+Run a second, deliberately difficult evaluation separately from the original 1,588-row baseline:
+
+```bash
+python -m src.stress_test_evaluation
+```
+
+The stress test fits Isolation Forest on the historical synthetic logs only, then scores 51 controlled events across 15 scenarios: 10 clearly benign-labelled events across five scenarios, 24 suspicious-labelled events across six scenarios, and 17 ambiguous events across four scenarios. It includes a cross-account password-spraying pattern (one source IP failing against four accounts) and a separate ambiguous shared-network pattern. Clearly benign cases include a new IP, new device, new location, or unusual login hour in isolation, plus six successful logins spaced six minutes apart. Suspicious cases include brute-force-style failures from familiar context, rapid successful logins from familiar context, low-and-slow failures, daytime logins involving a new IP/location or new device/location, and failures against multiple accounts from one source IP. Four overlapping scenarios—rapid successful logins, low-and-slow failures, a new device plus location during daytime, and failures against multiple accounts from a shared network—are marked ambiguous rather than assumed benign or malicious.
+
+Feature engineering also counts distinct accounts with failed logins from the same source IP in an inclusive 15-minute window. Four distinct accounts is a project-specific trigger threshold, not a universal security standard. This signal can help expose password spraying, but shared office/NAT/VPN egress can produce similar patterns; therefore, an alert is evidence for investigation, not proof of an attack. The script reports event-level and scenario-level precision, recall, F1, false-positive rate, accuracy, and confusion counts using only clearly labelled normal/anomaly cases. Ambiguous events and scenarios are excluded from binary metrics and listed separately with each detector's alert outcome; they are not silently counted as false positives or true positives. It also reports the event position of the first alert in each scenario, so you can compare detection delay and identify completely missed sequences. It compares three approaches: Isolation Forest alone, the risk-score baseline (score >= 3), and a diagnostic hybrid that alerts when either ML or the rules flag an event. The hybrid is a layered stress-test comparison; it does not replace the dashboard's existing final-status logic. Combining detectors can improve recall but may also increase false positives, so compare both metrics rather than assuming the hybrid is automatically better. The tests cover ambiguous-label exclusion, scenario detection, first-alert positions, and hybrid prediction logic.
+
+**Important evaluation caveat:** the stress set is small and hand-designed, and its labels are assumptions for testing, not objective truth. It is intended to expose blind spots and help guide further test design—not to establish real-world detection performance. It is separate from the original dataset and does not change the baseline labels or its reported results.

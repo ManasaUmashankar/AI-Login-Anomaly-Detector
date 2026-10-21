@@ -12,12 +12,14 @@ from src.utils import MODEL_PATH
 MODEL_FEATURES = [
     "login_hour", "failed_attempts", "is_new_ip", "is_new_device",
     "is_unusual_hour", "is_unusual_location", "login_frequency", "location_change",
+    "failed_logins_45m", "successful_logins_5m",
 ]
 
 # Model settings (project choices, not universal standards)
 N_TREES = 100
 CONTAMINATION = 0.05     # our guess: about 5% of rows are anomalous
 RANDOM_STATE = 42        # makes the result the same every run
+FEATURE_VERSION = 3      # rolling-window features added to the model inputs
 
 # NEW (Stage 9)
 ML_REASON = "Statistically unusual pattern (ML)"
@@ -39,17 +41,44 @@ def train_model(features_df):
 
 
 def save_model(model):
-    """Save the trained model to models/anomaly_model.pkl."""
+    """Save the trained model to the configured MODEL_PATH."""
     MODEL_PATH.parent.mkdir(exist_ok=True)
-    joblib.dump(model, MODEL_PATH)
+    joblib.dump({"feature_version": FEATURE_VERSION, "model": model}, MODEL_PATH)
+
+def model_is_current():
+    """Return whether the saved artifact matches the current feature semantics."""
+    if not MODEL_PATH.exists():
+        return False
+
+    try:
+        artifact = joblib.load(MODEL_PATH)
+    except Exception:
+        # A missing, legacy, or unreadable artifact should be rebuilt from data.
+        return False
+
+    return (
+        isinstance(artifact, dict)
+        and artifact.get("feature_version") == FEATURE_VERSION
+        and "model" in artifact
+    )
 
 
 def load_model():
-    """Load the saved model (so we don't retrain every time)."""
+    """Load a saved model only when its feature version matches this code."""
     if not MODEL_PATH.exists():
         raise FileNotFoundError("Model not found. Run: python -m src.anomaly_detector")
-    return joblib.load(MODEL_PATH)
 
+    artifact = joblib.load(MODEL_PATH)
+    if (
+        not isinstance(artifact, dict)
+        or artifact.get("feature_version") != FEATURE_VERSION
+        or "model" not in artifact
+    ):
+        raise ValueError(
+            "The saved model is outdated or unversioned. "
+            "Run: python -m src.anomaly_detector to retrain it."
+        )
+    return artifact["model"]
 
 def apply_model(model, features_df):
     """Add 'anomaly_score' and 'ml_result' columns."""
@@ -94,7 +123,7 @@ def run_pipeline(retrain=False):
     df = preprocess_logs(load_logs())
     features = build_features(df)
 
-    if retrain or not MODEL_PATH.exists():
+    if retrain or not model_is_current():
         save_model(train_model(features))
     model = load_model()
 

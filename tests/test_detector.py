@@ -64,18 +64,21 @@ def make_ml_frame():
         "is_unusual_location": 0,
         "login_frequency": 1,
         "location_change": 0,
+        "failed_logins_45m": 0,
+        "successful_logins_5m": 1,
     })
     outlier = pd.DataFrame([{
         "login_hour": 3, "failed_attempts": 12, "is_new_ip": 1, "is_new_device": 1,
         "is_unusual_hour": 1, "is_unusual_location": 1, "login_frequency": 13,
-        "location_change": 1,
+        "location_change": 1, "failed_logins_45m": 12, "successful_logins_5m": 13,
     }])
     return pd.concat([normal, outlier], ignore_index=True)
 
 
-@pytest.fixture(scope="module")
-def pipeline_result():
-    """Run the whole real pipeline once and share the result with several tests."""
+@pytest.fixture
+def pipeline_result(tmp_path, monkeypatch):
+    """Run the pipeline with an isolated model artifact; never overwrite the user's model."""
+    monkeypatch.setattr("src.anomaly_detector.MODEL_PATH", tmp_path / "pipeline_model.pkl")
     return run_pipeline()
 
 
@@ -132,6 +135,106 @@ def test_location_change_flags_the_switch():
     assert list(features["location_change"]) == [0] * 10 + [1]
 
 
+def test_rolling_login_status_windows_count_only_each_users_recent_events():
+    rows = [
+        make_row("2026-09-01 12:00:00", status="failed", failed=1),
+        make_row("2026-09-01 12:07:00", status="failed", failed=2),
+        make_row("2026-09-01 12:14:00", status="failed", failed=3),
+        make_row("2026-09-01 12:21:00", status="failed", failed=4),
+        make_row("2026-09-01 12:28:00", status="failed", failed=5),
+        make_row("2026-09-01 12:35:00", status="failed", failed=6),
+        make_row("2026-09-01 13:30:00", status="success"),
+    ]
+    features = build_features(make_logs(rows))
+    assert list(features["failed_logins_45m"]) == [1, 2, 3, 4, 5, 6, 0]
+    assert list(features["successful_logins_5m"]) == [0, 0, 0, 0, 0, 0, 1]
+
+
+def test_rapid_success_burst_is_flagged_without_unfamiliar_context():
+    rows = baseline_rows() + [
+        make_row(f"2026-09-15 14:00:{second:02d}", status="success")
+        for second in (1, 8, 15, 22, 29, 36)
+    ]
+    result = analyse(rows)
+    burst = result.iloc[-1]
+    assert burst["successful_logins_5m"] == 6
+    assert "Rapid successful login burst" in burst["detection_reasons"]
+    assert burst["risk_score"] >= 3
+
+def test_cross_account_failure_window_detects_password_spray_pattern():
+    rows = baseline_rows()
+    for attempt, username in enumerate(("alice", "bob", "cara", "dan"), start=1):
+        row = make_row(
+            f"2026-09-15 14:00:{attempt * 8:02d}",
+            status="failed",
+            failed=1,
+        )
+        row[1] = username
+        row[2] = "198.51.100.203"
+        rows.append(row)
+
+    result = analyse(rows)
+    sequence = result.iloc[-4:]
+    assert list(sequence["distinct_failed_users_per_ip_15m"]) == [1, 2, 3, 4]
+    assert "Failed logins against multiple accounts from one source" in (
+        sequence.iloc[-1]["detection_reasons"]
+    )
+    assert sequence.iloc[-1]["risk_score"] >= 3
+
+
+def test_password_spray_rule_triggers_without_other_risk_signals():
+    # Isolate the spray signal: no new IP/device/location, unusual hour, or burst.
+    features = pd.DataFrame([{
+        "failed_attempts": 1,
+        "login_status": "failed",
+        "is_new_ip": 0,
+        "is_new_device": 0,
+        "is_unusual_location": 0,
+        "is_unusual_hour": 0,
+        "login_frequency": 1,
+        "failed_logins_45m": 1,
+        "successful_logins_5m": 0,
+        "distinct_failed_users_per_ip_15m": 4,
+    }])
+
+    ruled = apply_rules(features)
+    scored = apply_risk_scores(features)
+
+    assert ruled.iloc[0]["detection_reasons"] == (
+        "Failed logins against multiple accounts from one source"
+    )
+    assert scored.iloc[0]["risk_score"] == 3
+    assert scored.iloc[0]["risk_level"] == "Medium"
+
+
+def test_cross_account_failure_window_does_not_mix_source_ips():
+    rows = []
+    for attempt, username in enumerate(("alice", "bob", "cara", "dan"), start=1):
+        row = make_row(
+            f"2026-09-15 14:00:{attempt * 8:02d}",
+            status="failed",
+            failed=1,
+        )
+        row[1] = username
+        row[2] = f"198.51.100.{200 + attempt}"
+        rows.append(row)
+
+    features = build_features(make_logs(rows))
+    assert list(features["distinct_failed_users_per_ip_15m"]) == [1, 1, 1, 1]
+
+
+def test_low_and_slow_failures_trigger_before_the_sequence_ends():
+    rows = baseline_rows() + [
+        make_row(f"2026-09-15 14:{minute:02d}:00", status="failed", failed=attempt)
+        for attempt, minute in enumerate((0, 7, 14, 21, 28, 35), start=1)
+    ]
+    result = analyse(rows)
+    sequence = result.iloc[-6:]
+    assert list(sequence["failed_logins_45m"]) == [1, 2, 3, 4, 5, 6]
+    assert (sequence.iloc[-2:]["risk_score"] >= 3).all()
+    assert sequence.iloc[-1]["risk_level"] == "Medium"
+
+
 # ---------- Detection rules ----------
 def test_normal_logins_trigger_no_rules():
     result = analyse(baseline_rows())
@@ -146,7 +249,7 @@ def test_brute_force_then_success_triggers_expected_rules():
     assert "Multiple failed login attempts" in last["detection_reasons"]
     assert "Successful login after repeated failures" in last["detection_reasons"]
     assert "Rapid login attempts" in last["detection_reasons"]
-    assert last["rules_triggered"] == 4         # (not at an unusual hour, so no rule 3)
+    assert last["rules_triggered"] == 5         # includes the 45-minute repeated-failure rule
 
 
 # ---------- Risk scoring ----------
@@ -170,10 +273,10 @@ def test_vpn_like_login_is_medium_not_high():
     assert last["risk_level"] == "Medium"
 
 
-def test_brute_force_success_scores_12_and_high():
+def test_brute_force_success_scores_15_and_high():
     result = analyse(baseline_rows() + brute_force_rows())
     last = result.iloc[-1]
-    assert last["risk_score"] == 12             # six signals x 2 points, daytime
+    assert last["risk_score"] == 15             # original six signals plus rolling repeated-failure signal
     assert last["risk_level"] == "High"
 
 
@@ -242,3 +345,106 @@ def test_pipeline_most_rows_are_normal_activity(pipeline_result):
 def test_pipeline_top_risk_row_requires_investigation(pipeline_result):
     top = pipeline_result.loc[pipeline_result["risk_score"].idxmax()]
     assert top["final_status"] == "Requires investigation"
+
+# ---------- Evaluation methodology ----------
+def test_calculate_metrics_counts_confusion_matrix_and_false_positives():
+    from src.evaluate_model import calculate_metrics
+
+    actual = ["normal", "normal", "normal", "anomaly", "anomaly"]
+    predicted = ["normal", "anomaly", "normal", "anomaly", "normal"]
+    metrics = calculate_metrics(actual, predicted)
+
+    assert metrics["tn"] == 2
+    assert metrics["fp"] == 1
+    assert metrics["fn"] == 1
+    assert metrics["tp"] == 1
+    assert metrics["false_positive_rate"] == pytest.approx(1 / 3)
+    assert metrics["precision"] == pytest.approx(1 / 2)
+    assert metrics["recall"] == pytest.approx(1 / 2)
+    assert metrics["f1"] == pytest.approx(1 / 2)
+
+
+def test_calculate_metrics_rejects_mismatched_lengths():
+    from src.evaluate_model import calculate_metrics
+
+    with pytest.raises(ValueError, match="same length"):
+        calculate_metrics(["normal"], ["normal", "anomaly"])
+
+
+def test_calculate_metrics_rejects_empty_holdout():
+    from src.evaluate_model import calculate_metrics
+
+    with pytest.raises(ValueError, match="empty"):
+        calculate_metrics([], [])
+
+
+
+def test_multi_window_evaluation_uses_expanding_chronological_training(monkeypatch):
+    from src.evaluate_model import evaluate_temporal_windows
+
+    monkeypatch.setattr("src.evaluate_model.train_model", lambda frame: object())
+    monkeypatch.setattr(
+        "src.evaluate_model.apply_model",
+        lambda model, frame: pd.DataFrame({"ml_result": ["Normal"] * len(frame)}),
+    )
+
+    rows = [
+        make_row(f"2026-09-{day:02d} 10:00:00")
+        for day in range(1, 13)
+    ]
+    frame = make_logs(rows)
+    frame["true_label"] = ["normal", "anomaly"] * 6
+
+    results = evaluate_temporal_windows(frame, train_fraction=0.50, windows=3)
+
+    assert len(results) == 3
+    assert [item["metadata"]["train_rows"] for item in results] == [6, 8, 10]
+    assert [item["metadata"]["test_rows"] for item in results] == [2, 2, 2]
+    assert all("baseline_metrics" in item for item in results)
+    assert all(item["metrics"]["fn"] >= 0 for item in results)
+
+
+def test_temporal_splits_never_separate_equal_timestamps(monkeypatch):
+    from src.evaluate_model import evaluate_temporal_holdout, evaluate_temporal_windows
+
+    monkeypatch.setattr("src.evaluate_model.train_model", lambda frame: object())
+    monkeypatch.setattr(
+        "src.evaluate_model.apply_model",
+        lambda model, frame: pd.DataFrame({"ml_result": ["Normal"] * len(frame)}),
+    )
+
+    # Duplicate timestamp groups deliberately straddle the old row-based boundaries.
+    timestamps = [
+        "2026-09-01 10:00:00",
+        "2026-09-02 10:00:00",
+        "2026-09-03 10:00:00",
+        "2026-09-03 10:00:00",
+        "2026-09-04 10:00:00",
+        "2026-09-05 10:00:00",
+        "2026-09-05 10:00:00",
+        "2026-09-06 10:00:00",
+        "2026-09-07 10:00:00",
+        "2026-09-08 10:00:00",
+        "2026-09-08 10:00:00",
+        "2026-09-09 10:00:00",
+    ]
+    frame = make_logs([make_row(timestamp) for timestamp in timestamps])
+    frame["true_label"] = ["normal", "anomaly"] * 6
+
+    _, holdout = evaluate_temporal_holdout(frame, train_fraction=0.60)
+    assert holdout["train_end"] < holdout["test_start"]
+
+    windows = evaluate_temporal_windows(frame, train_fraction=0.40, windows=3)
+    assert len(windows) == 3
+    for result in windows:
+        metadata = result["metadata"]
+        assert metadata["train_end"] < metadata["test_start"]
+    for earlier, later in zip(windows, windows[1:]):
+        assert earlier["metadata"]["test_end"] < later["metadata"]["test_start"]
+
+
+def test_multi_window_evaluation_rejects_fewer_than_two_windows():
+    from src.evaluate_model import evaluate_temporal_windows
+
+    with pytest.raises(ValueError, match="at least 2"):
+        evaluate_temporal_windows(pd.DataFrame(), windows=1)
