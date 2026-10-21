@@ -313,6 +313,12 @@ Run `python -m src.evaluate_model` to perform **four chronological holdout windo
 
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
+## Latest Evaluation Snapshot
+
+Latest local run (2026-10-21) on synthetic login data: across four chronological holdout windows, Isolation Forest achieved an unweighted mean F1-score of **0.9583** and recall of **0.9286**; the rule-based risk-score baseline achieved mean F1 of **0.9947** and recall of **1.0000**. In the separate controlled stress test, the hybrid detector achieved event-level F1 of **0.667** and recall of **0.500** across 34 clearly labelled events; 17 ambiguous events were reviewed separately.
+
+These are results on synthetic, deliberately designed data, not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. See the [full evaluation guide](docs/evaluation-guide.md) for per-window metrics and interpretation.
+
 ## Project Documentation
 
 - [Architecture and component flow](docs/architecture.md)
