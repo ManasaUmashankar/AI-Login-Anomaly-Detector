@@ -46,8 +46,11 @@ def add_difference_from_usual(df, column, new_name):
         # Process equal timestamps as a batch to avoid order-dependent leakage.
         for _, batch in user_group.groupby("timestamp", sort=True):
             if history:
-                # dict insertion order gives deterministic first-seen tie-breaking.
-                usual_value = max(history, key=history.get)
+                # Break frequency ties by a stable value ordering, not input row order.
+                usual_value = min(
+                    history,
+                    key=lambda value: (-history[value], str(value)),
+                )
                 flags.loc[batch.index] = (
                     batch[column] != usual_value
                 ).astype("int64")
@@ -78,7 +81,10 @@ def add_location_change(df):
                 ).astype("int64")
 
             counts = batch["location"].value_counts(sort=False)
-            previous_location = counts.idxmax()
+            highest_count = counts.max()
+            # A timestamp batch can contain tied locations; choose consistently.
+            tied_locations = counts[counts == highest_count].index.tolist()
+            previous_location = min(tied_locations, key=lambda value: str(value))
 
     df["location_change"] = flags
     return df
