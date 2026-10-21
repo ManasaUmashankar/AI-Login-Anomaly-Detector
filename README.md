@@ -23,7 +23,8 @@ An educational **Blue Team** project that analyses synthetic login logs and flag
 11. [Installation](#installation)
 12. [Usage](#usage)
 13. [Dashboard](#dashboard)
-14. [Example Output](#example-output)
+14. [Dashboard Screenshots](#dashboard-screenshots)
+15. [Example Output](#example-output)
 15. [Testing](#testing)
 16. [Limitations](#limitations)
 17. [Future Improvements](#future-improvements)
@@ -290,6 +291,36 @@ The dashboard is designed as a small SOC analyst workspace. It includes:
 - **Pipeline refresh control:** request refreshed pipeline results from the dashboard.
 
 Exact labels and counts can change with the dataset and pipeline output. The dashboard is a local prototype; it does not ingest live authentication events or send production alerts.
+
+## Dashboard Screenshots
+
+The Streamlit dashboard provides a compact SOC-style workflow: review authentication trends, prioritize the alert queue, and inspect the context behind an individual event.
+
+### Security overview
+
+![AI Login Anomaly Detector dashboard overview](docs/images/dashboard-overview.png)
+
+*Overview metrics and authentication telemetry from the synthetic login dataset.*
+
+### Analyst alert queue
+
+![Analyst alert queue with risk scores and severity](docs/images/alert-queue.png)
+
+*Alerts are ordered by risk score so higher-priority events can be reviewed first.*
+
+### Alert table detail
+
+![Alert table showing event timestamps, accounts, source IPs, risk scores, and detection reasons](docs/images/severity-filter.png)
+
+*The event table surfaces the fields an analyst can use to triage suspicious activity. This screenshot illustrates the queue; it should only be described as a severity-filter demo if the High-only filter was actually applied.*
+
+### Event investigation
+
+![Selected login event investigation showing risk score, severity, ML signal, event context, and detection reasons](docs/images/alert-investigation.png)
+
+*Inspect the selected event's context and the reasons it was flagged. An alert is a lead for investigation, not proof of compromise.*
+
+> Screenshots show a local prototype using synthetic data, not a live production SOC.
 
 ## Example Output
 
