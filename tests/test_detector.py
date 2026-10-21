@@ -404,6 +404,45 @@ def test_multi_window_evaluation_uses_expanding_chronological_training(monkeypat
     assert all(item["metrics"]["fn"] >= 0 for item in results)
 
 
+def test_temporal_splits_never_separate_equal_timestamps(monkeypatch):
+    from src.evaluate_model import evaluate_temporal_holdout, evaluate_temporal_windows
+
+    monkeypatch.setattr("src.evaluate_model.train_model", lambda frame: object())
+    monkeypatch.setattr(
+        "src.evaluate_model.apply_model",
+        lambda model, frame: pd.DataFrame({"ml_result": ["Normal"] * len(frame)}),
+    )
+
+    # Duplicate timestamp groups deliberately straddle the old row-based boundaries.
+    timestamps = [
+        "2026-09-01 10:00:00",
+        "2026-09-02 10:00:00",
+        "2026-09-03 10:00:00",
+        "2026-09-03 10:00:00",
+        "2026-09-04 10:00:00",
+        "2026-09-05 10:00:00",
+        "2026-09-05 10:00:00",
+        "2026-09-06 10:00:00",
+        "2026-09-07 10:00:00",
+        "2026-09-08 10:00:00",
+        "2026-09-08 10:00:00",
+        "2026-09-09 10:00:00",
+    ]
+    frame = make_logs([make_row(timestamp) for timestamp in timestamps])
+    frame["true_label"] = ["normal", "anomaly"] * 6
+
+    _, holdout = evaluate_temporal_holdout(frame, train_fraction=0.60)
+    assert holdout["train_end"] < holdout["test_start"]
+
+    windows = evaluate_temporal_windows(frame, train_fraction=0.40, windows=3)
+    assert len(windows) == 3
+    for result in windows:
+        metadata = result["metadata"]
+        assert metadata["train_end"] < metadata["test_start"]
+    for earlier, later in zip(windows, windows[1:]):
+        assert earlier["metadata"]["test_end"] < later["metadata"]["test_start"]
+
+
 def test_multi_window_evaluation_rejects_fewer_than_two_windows():
     from src.evaluate_model import evaluate_temporal_windows
 
