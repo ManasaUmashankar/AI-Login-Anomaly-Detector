@@ -313,6 +313,13 @@ Run `python -m src.evaluate_model` to perform **four chronological holdout windo
 
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
+## Project Documentation
+
+- [Architecture and component flow](docs/architecture.md)
+- [Evaluation guide and metric interpretation](docs/evaluation-guide.md)
+- [Demo walkthrough](docs/demo-walkthrough.md)
+- [SOC Analyst interview notes](docs/interview-notes.md)
+
 ## Testing
 
 ```powershell
