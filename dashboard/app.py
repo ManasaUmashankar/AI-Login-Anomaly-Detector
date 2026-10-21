@@ -31,7 +31,7 @@ TABLE_COLUMNS = {
 }
 
 st.set_page_config(
-    page_title="AI Login Anomaly Detector | Sentinel",
+    page_title="AI Login Anomaly Detector",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -58,7 +58,7 @@ st.markdown(
     .brand-mark { display:flex; align-items:center; justify-content:center; width:42px;height:42px;
       border:1px solid rgba(255,138,61,.48); border-radius:12px; color:var(--amber);
       background:rgba(255,138,61,.10); font-size:21px; }
-    .brand-name { color:var(--text); font-weight:850; font-size:.84rem; letter-spacing:.035em; line-height:1.35; max-width:180px; }
+    .brand-name { color:var(--text); font-weight:850; font-size:.79rem; letter-spacing:.025em; line-height:1.35; max-width:190px; }
     .brand-sub { color:var(--muted); font-size:.68rem; letter-spacing:.13em; text-transform:uppercase; margin-top:3px; }
     .eyebrow { color:var(--amber); font-size:.7rem; font-weight:850; letter-spacing:.16em; text-transform:uppercase; }
     .hero { display:flex; justify-content:space-between; align-items:center; gap:22px; padding:25px 28px;
@@ -118,9 +118,9 @@ def chart_layout(fig, height=310):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#aab6c4", family="Inter, sans-serif", size=11),
-        title=dict(font=dict(color="#edf2f7", size=13), x=0.03, xanchor="left", y=0.97),
-        margin=dict(l=18, r=18, t=64, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=10)),
+        title=dict(font=dict(color="#edf2f7", size=13), x=0.03, xanchor="left", y=1.0),
+        margin=dict(l=18, r=18, t=88, b=24),
+        legend=dict(orientation="h", yanchor="bottom", y=1.13, x=0, font=dict(size=10)),
         hoverlabel=dict(bgcolor="#18212c", font_color="#f3f6fa"),
     )
     fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#27313e")
@@ -322,7 +322,7 @@ else:
     q1, q2, q3 = st.columns(3)
     q1.metric("Potentially suspicious", int((suspicious["final_status"] == "Potentially suspicious").sum()))
     q2.metric("Requires investigation", int((suspicious["final_status"] == "Requires investigation").sum()))
-    q3.metric("Medium severity", len(medium_risk))
+    q3.metric("Medium severity", int((suspicious["risk_level"] == "Medium").sum()))
     st.caption("Sorted by risk score first. Treat each row as a lead for investigation, not a confirmed incident.")
     table = make_alert_table(suspicious)
     st.dataframe(
@@ -402,7 +402,7 @@ else:
 
 st.divider()
 st.markdown(
-    '<div class="footnote">AI Login Anomaly Detector · Sentinel analyst workspace · '
+    '<div class="footnote">AI Login Anomaly Detector · Analyst workspace · '
     'Rule thresholds and model outputs are project-specific. Validate against labelled, representative data before operational use.</div>',
     unsafe_allow_html=True,
 )
