@@ -27,7 +27,98 @@ TABLE_COLUMNS = {
     "detection_reasons": "Detection Reason",
 }
 
-st.set_page_config(page_title="AI Login Anomaly Detector", layout="wide")
+st.set_page_config(page_title="AI Login Anomaly Detector", page_icon="🛡️", layout="wide")
+
+# ---------- SOC visual theme ----------
+st.markdown(
+    """
+    <style>
+    :root {
+        --soc-bg: #0b0e12;
+        --soc-panel: #12171e;
+        --soc-panel-raised: #171e27;
+        --soc-border: #28313c;
+        --soc-text: #edf2f7;
+        --soc-muted: #9aa7b5;
+        --soc-orange: #ff8a3d;
+        --soc-orange-soft: rgba(255, 138, 61, 0.12);
+    }
+    .stApp {
+        background:
+            radial-gradient(ellipse at 80% 0%, rgba(255, 138, 61, 0.075), transparent 34%),
+            var(--soc-bg);
+        color: var(--soc-text);
+    }
+    [data-testid="stHeader"] { background: rgba(11, 14, 18, 0.88); }
+    [data-testid="stSidebar"] {
+        background: #0e1319;
+        border-right: 1px solid var(--soc-border);
+    }
+    [data-testid="stSidebar"] > div { background: transparent; }
+    h1, h2, h3 { color: var(--soc-text) !important; letter-spacing: -0.025em; }
+    h1 { font-weight: 750 !important; }
+    p, label, [data-testid="stCaptionContainer"] { color: var(--soc-muted); }
+    [data-testid="stMetric"] {
+        background: linear-gradient(145deg, #171e27, #11161d);
+        border: 1px solid var(--soc-border);
+        border-top: 2px solid var(--soc-orange);
+        padding: 17px 18px;
+        border-radius: 13px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+    }
+    [data-testid="stMetricLabel"] { color: var(--soc-muted) !important; }
+    [data-testid="stMetricValue"] { color: var(--soc-text) !important; }
+    [data-testid="stMetricDelta"] { color: var(--soc-orange) !important; }
+    [data-testid="stPlotlyChart"] {
+        background: var(--soc-panel);
+        border: 1px solid var(--soc-border);
+        border-radius: 13px;
+        padding: 8px 8px 0;
+    }
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--soc-border);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    div[data-baseweb="select"] > div, div[data-baseweb="input"] > div {
+        background: var(--soc-panel-raised);
+        border-color: var(--soc-border);
+    }
+    .soc-hero {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 20px; padding: 25px 27px; margin: 5px 0 24px;
+        border: 1px solid #34302c; border-radius: 17px;
+        background: linear-gradient(115deg, #171b21 0%, #1c1a18 65%, #241910 100%);
+    }
+    .soc-kicker {
+        color: var(--soc-orange); text-transform: uppercase; font-size: 0.72rem;
+        font-weight: 800; letter-spacing: 0.16em; margin-bottom: 8px;
+    }
+    .soc-title { font-size: clamp(1.65rem, 3vw, 2.35rem); font-weight: 800;
+        color: #f5f7fa; letter-spacing: -0.045em; line-height: 1.1; }
+    .soc-subtitle { color: #a9b3be; font-size: 0.94rem; margin-top: 9px; max-width: 650px; }
+    .soc-status {
+        white-space: nowrap; border: 1px solid rgba(255, 138, 61, .42);
+        color: #ffb17d; background: var(--soc-orange-soft); border-radius: 999px;
+        padding: 9px 13px; font-size: .76rem; font-weight: 750; letter-spacing: .04em;
+    }
+    .soc-section {
+        color: var(--soc-orange); text-transform: uppercase; letter-spacing: .12em;
+        font-size: .72rem; font-weight: 800; margin: 8px 0 5px;
+    }
+    div.stButton > button {
+        border: 1px solid var(--soc-border); border-radius: 9px;
+        background: var(--soc-panel-raised); color: var(--soc-text);
+    }
+    div.stButton > button:hover { border-color: var(--soc-orange); color: var(--soc-orange); }
+    hr { border-color: var(--soc-border); }
+    @media (max-width: 700px) {
+        .soc-hero { align-items: flex-start; flex-direction: column; padding: 20px; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_data
@@ -44,13 +135,28 @@ def make_count_chart(df, column, title):
 
 results = load_results(FEATURE_VERSION)
 
-st.title("AI Login Anomaly Detector")
+st.markdown(
+    """
+    <div class="soc-hero">
+      <div>
+        <div class="soc-kicker">Security Operations · Authentication Analytics</div>
+        <div class="soc-title">Login Threat Monitor</div>
+        <div class="soc-subtitle">
+          AI-assisted visibility into authentication patterns, risk signals, and events
+          that may deserve analyst review.
+        </div>
+      </div>
+      <div class="soc-status">● PROTOTYPE · MONITORING VIEW</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.caption(
-    "Educational prototype using synthetic data. "
-    "An anomaly is a signal to investigate, not proof of an attack."
+    "Educational prototype using synthetic data. An anomaly is a signal to investigate, "
+    "not proof of an attack."
 )
 
-# ---------- Sidebar filters ----------
+st.markdown('<div class="soc-section">01 / Scope & filters</div>', unsafe_allow_html=True)\n\n# ---------- Sidebar filters ----------
 st.sidebar.header("Filters")
 all_users = sorted(results["username"].unique())
 all_locations = sorted(results["location"].unique())
@@ -87,7 +193,7 @@ if data.empty:
 
 suspicious = data[data["final_status"] != NORMAL_STATUS]
 
-# ---------- Headline numbers ----------
+st.markdown('<div class="soc-section">02 / Security overview</div>', unsafe_allow_html=True)\n\n# ---------- Headline numbers ----------
 total = len(data)
 successful = int((data["login_status"] == "success").sum())
 failed = int((data["login_status"] == "failed").sum())
@@ -101,7 +207,7 @@ c3.metric("Failed logins", f"{failed:,}")
 c4.metric("Anomalies detected (ML)", f"{anomalies:,}")
 c5.metric("High-risk events", f"{high_risk:,}")
 
-# ---------- Charts: activity ----------
+st.markdown('<div class="soc-section">03 / Authentication telemetry</div>', unsafe_allow_html=True)\n\n# ---------- Charts: activity ----------
 left, right = st.columns(2)
 with left:
     daily = (
@@ -118,7 +224,7 @@ with right:
                            color="login_status", color_discrete_map=STATUS_COLORS,
                            title="Successful vs failed logins"))
 
-# ---------- Charts: suspicious events ----------
+st.markdown('<div class="soc-section">04 / Threat patterns</div>', unsafe_allow_html=True)\n\n# ---------- Charts: suspicious events ----------
 st.subheader("Suspicious events")
 st.caption("Suspicious = final status is not 'Normal activity' (rules and ML combined).")
 if suspicious.empty:
@@ -130,7 +236,7 @@ else:
     with right:
         st.plotly_chart(make_count_chart(suspicious, "location", "Suspicious events by location"))
 
-# ---------- Risk distribution ----------
+st.markdown('<div class="soc-section">05 / Risk posture</div>', unsafe_allow_html=True)\n\n# ---------- Risk distribution ----------
 st.subheader("Risk distribution")
 left, right = st.columns(2)
 with left:
@@ -148,7 +254,7 @@ with right:
         "- Scores and thresholds are this project's own design choices."
     )
 
-# ---------- Suspicious login table ----------
+st.markdown('<div class="soc-section">06 / Alert queue</div>', unsafe_allow_html=True)\n\n# ---------- Suspicious login table ----------
 st.subheader("Suspicious login table")
 if suspicious.empty:
     st.info("No suspicious logins for the selected filters.")
@@ -158,7 +264,7 @@ else:
     st.dataframe(table, hide_index=True)
 
     
-# ---------- Alert investigation view ----------
+st.markdown('<div class="soc-section">07 / Analyst investigation</div>', unsafe_allow_html=True)\n\n# ---------- Alert investigation view ----------
 st.subheader("Alert investigation")
 
 if suspicious.empty:
