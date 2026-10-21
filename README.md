@@ -25,11 +25,15 @@ An educational **Blue Team** project that analyses synthetic login logs and flag
 13. [Dashboard](#dashboard)
 14. [Dashboard Screenshots](#dashboard-screenshots)
 15. [Example Output](#example-output)
-15. [Testing](#testing)
-16. [Limitations](#limitations)
-17. [Future Improvements](#future-improvements)
-18. [Blue Team / SOC Relevance](#blue-team--soc-relevance)
-19. [Disclaimer](#disclaimer)
+16. [Model Evaluation](#model-evaluation)
+17. [Project Documentation](#project-documentation)
+18. [Testing](#testing)
+19. [Limitations](#limitations)
+20. [Future Improvements](#future-improvements)
+21. [Blue Team / SOC Relevance](#blue-team--soc-relevance)
+22. [Disclaimer](#disclaimer)
+23. [Synthetic Label / Rule Alignment Audit](#synthetic-label--rule-alignment-audit)
+24. [Controlled Edge-Case Stress Test](#controlled-edge-case-stress-test)
 
 ---
 
@@ -298,25 +302,25 @@ The Streamlit dashboard provides a compact SOC-style workflow: review authentica
 
 ### Security overview
 
-![AI Login Anomaly Detector dashboard overview](docs/images/dashboard-overview.png)
+![AI Login Anomaly Detector dashboard overview](docs/images/dashboard-overview.jpg)
 
 *Overview metrics and authentication telemetry from the synthetic login dataset.*
 
 ### Analyst alert queue
 
-![Analyst alert queue with risk scores and severity](docs/images/alert-queue.png)
+![Analyst alert queue with risk scores and severity](docs/images/alert-queue.jpg)
 
 *Alerts are ordered by risk score so higher-priority events can be reviewed first.*
 
 ### Alert table detail
 
-![Alert table showing event timestamps, accounts, source IPs, risk scores, and detection reasons](docs/images/severity-filter.png)
+![Alert table showing event timestamps, accounts, source IPs, risk scores, and detection reasons](docs/images/severity-filter.jpg)
 
 *The event table surfaces the fields an analyst can use to triage suspicious activity. This screenshot illustrates the queue; it should only be described as a severity-filter demo if the High-only filter was actually applied.*
 
 ### Event investigation
 
-![Selected login event investigation showing risk score, severity, ML signal, event context, and detection reasons](docs/images/alert-investigation.png)
+![Selected login event investigation showing risk score, severity, ML signal, event context, and detection reasons](docs/images/alert-investigation.jpg)
 
 *Inspect the selected event's context and the reasons it was flagged. An alert is a lead for investigation, not proof of compromise.*
 
