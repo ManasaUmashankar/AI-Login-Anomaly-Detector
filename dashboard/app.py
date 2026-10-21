@@ -156,7 +156,9 @@ st.caption(
     "not proof of an attack."
 )
 
-st.markdown('<div class="soc-section">01 / Scope & filters</div>', unsafe_allow_html=True)\n\n# ---------- Sidebar filters ----------
+st.markdown('<div class="soc-section">01 / Scope & filters</div>', unsafe_allow_html=True)
+
+# ---------- Sidebar filters ----------
 st.sidebar.header("Filters")
 all_users = sorted(results["username"].unique())
 all_locations = sorted(results["location"].unique())
@@ -193,7 +195,9 @@ if data.empty:
 
 suspicious = data[data["final_status"] != NORMAL_STATUS]
 
-st.markdown('<div class="soc-section">02 / Security overview</div>', unsafe_allow_html=True)\n\n# ---------- Headline numbers ----------
+st.markdown('<div class="soc-section">02 / Security overview</div>', unsafe_allow_html=True)
+
+# ---------- Headline numbers ----------
 total = len(data)
 successful = int((data["login_status"] == "success").sum())
 failed = int((data["login_status"] == "failed").sum())
@@ -207,7 +211,9 @@ c3.metric("Failed logins", f"{failed:,}")
 c4.metric("Anomalies detected (ML)", f"{anomalies:,}")
 c5.metric("High-risk events", f"{high_risk:,}")
 
-st.markdown('<div class="soc-section">03 / Authentication telemetry</div>', unsafe_allow_html=True)\n\n# ---------- Charts: activity ----------
+st.markdown('<div class="soc-section">03 / Authentication telemetry</div>', unsafe_allow_html=True)
+
+# ---------- Charts: activity ----------
 left, right = st.columns(2)
 with left:
     daily = (
@@ -224,7 +230,9 @@ with right:
                            color="login_status", color_discrete_map=STATUS_COLORS,
                            title="Successful vs failed logins"))
 
-st.markdown('<div class="soc-section">04 / Threat patterns</div>', unsafe_allow_html=True)\n\n# ---------- Charts: suspicious events ----------
+st.markdown('<div class="soc-section">04 / Threat patterns</div>', unsafe_allow_html=True)
+
+# ---------- Charts: suspicious events ----------
 st.subheader("Suspicious events")
 st.caption("Suspicious = final status is not 'Normal activity' (rules and ML combined).")
 if suspicious.empty:
@@ -236,7 +244,9 @@ else:
     with right:
         st.plotly_chart(make_count_chart(suspicious, "location", "Suspicious events by location"))
 
-st.markdown('<div class="soc-section">05 / Risk posture</div>', unsafe_allow_html=True)\n\n# ---------- Risk distribution ----------
+st.markdown('<div class="soc-section">05 / Risk posture</div>', unsafe_allow_html=True)
+
+# ---------- Risk distribution ----------
 st.subheader("Risk distribution")
 left, right = st.columns(2)
 with left:
@@ -254,7 +264,9 @@ with right:
         "- Scores and thresholds are this project's own design choices."
     )
 
-st.markdown('<div class="soc-section">06 / Alert queue</div>', unsafe_allow_html=True)\n\n# ---------- Suspicious login table ----------
+st.markdown('<div class="soc-section">06 / Alert queue</div>', unsafe_allow_html=True)
+
+# ---------- Suspicious login table ----------
 st.subheader("Suspicious login table")
 if suspicious.empty:
     st.info("No suspicious logins for the selected filters.")
@@ -264,7 +276,9 @@ else:
     st.dataframe(table, hide_index=True)
 
     
-st.markdown('<div class="soc-section">07 / Analyst investigation</div>', unsafe_allow_html=True)\n\n# ---------- Alert investigation view ----------
+st.markdown('<div class="soc-section">07 / Analyst investigation</div>', unsafe_allow_html=True)
+
+# ---------- Alert investigation view ----------
 st.subheader("Alert investigation")
 
 if suspicious.empty:
