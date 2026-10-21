@@ -182,6 +182,31 @@ def test_cross_account_failure_window_detects_password_spray_pattern():
     assert sequence.iloc[-1]["risk_score"] >= 3
 
 
+def test_password_spray_rule_triggers_without_other_risk_signals():
+    # Isolate the spray signal: no new IP/device/location, unusual hour, or burst.
+    features = pd.DataFrame([{
+        "failed_attempts": 1,
+        "login_status": "failed",
+        "is_new_ip": 0,
+        "is_new_device": 0,
+        "is_unusual_location": 0,
+        "is_unusual_hour": 0,
+        "login_frequency": 1,
+        "failed_logins_45m": 1,
+        "successful_logins_5m": 0,
+        "distinct_failed_users_per_ip_15m": 4,
+    }])
+
+    ruled = apply_rules(features)
+    scored = apply_risk_scores(features)
+
+    assert ruled.iloc[0]["detection_reasons"] == (
+        "Failed logins against multiple accounts from one source"
+    )
+    assert scored.iloc[0]["risk_score"] == 3
+    assert scored.iloc[0]["risk_level"] == "Medium"
+
+
 def test_cross_account_failure_window_does_not_mix_source_ips():
     rows = []
     for attempt, username in enumerate(("alice", "bob", "cara", "dan"), start=1):
