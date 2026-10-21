@@ -252,7 +252,7 @@ AI-Login-Anomaly-Detector/
 Requires Python 3.10 or newer and Git.
 
 ```powershell
-git clone https://github.com/your-username/AI-Login-Anomaly-Detector.git
+git clone https://github.com/ManasaUmashankar/AI-Login-Anomaly-Detector.git
 cd AI-Login-Anomaly-Detector
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -278,12 +278,18 @@ Each stage can also be run on its own, for example `python -m src.preprocessing`
 
 ## Dashboard
 
-After step 4 above, open `http://localhost:8501`.
+After starting Streamlit, open `http://localhost:8501`.
 
-- **Headline numbers:** total login attempts, successful logins, failed logins, anomalies detected (ML), and high-risk events.
-- **Charts:** login activity over time, successful vs failed logins, suspicious events by user, suspicious events by location, and risk level counts.
-- **Filters:** username, location, risk level, status, and date range.
-- **Suspicious login table:** timestamp, username, IP, location, device, risk score, ML result, status, and detection reason, sorted by risk score.
+The dashboard is designed as a small SOC analyst workspace. It includes:
+
+- **Overview metrics:** login-event volume, failed logins, ML outliers, high-severity events, and events requiring review.
+- **Activity and risk visualisations:** login activity over time and a breakdown of risk levels.
+- **Alert filtering:** use the available filters to focus on events relevant to an investigation.
+- **Alert queue:** review suspicious events with risk scores, severity, and disposition/status information.
+- **Investigation context:** inspect a selected event, its detection reasons, and suggested analyst checks.
+- **Pipeline refresh control:** request refreshed pipeline results from the dashboard.
+
+Exact labels and counts can change with the dataset and pipeline output. The dashboard is a local prototype; it does not ingest live authentication events or send production alerts.
 
 ## Example Output
 
@@ -306,6 +312,13 @@ The dataset contains planted synthetic scenarios. Performance on those scenarios
 Run `python -m src.evaluate_model` to perform **four chronological holdout windows**. The model starts with the earliest 40% of valid login events, then evaluates consecutive later windows while expanding the training history. Each window reports precision, recall, F1-score, false-positive rate, accuracy, and a confusion matrix. The report also compares Isolation Forest with a simple explainable rule-based baseline that flags rows with a risk score of 3 or higher.
 
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
+
+## Project Documentation
+
+- [Architecture and component flow](docs/architecture.md)
+- [Evaluation guide and metric interpretation](docs/evaluation-guide.md)
+- [Demo walkthrough](docs/demo-walkthrough.md)
+- [SOC Analyst interview notes](docs/interview-notes.md)
 
 ## Testing
 
