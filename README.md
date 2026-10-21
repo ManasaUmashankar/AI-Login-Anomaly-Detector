@@ -92,7 +92,7 @@ data/login_logs.csv
               |                            |
               v                            v
    Rules + Risk scoring             Isolation Forest
-   (explainable)                    (behavioural anomaly)F
+   (explainable)                    (behavioural anomaly)
               |                            |
               +-------------+--------------+
                             v
@@ -235,7 +235,7 @@ AI-Login-Anomaly-Detector/
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
 │   └── utils.py                 # shared file paths
 ├── models/
-│   └── anomaly_model.pkl
+│   └── anomaly_model_v3.pkl
 ├── dashboard/
 │   └── app.py
 ├── notebooks/                   # reserved for exploration notebooks
