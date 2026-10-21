@@ -41,10 +41,9 @@ def train_model(features_df):
 
 
 def save_model(model):
-    """Save the trained model to models/anomaly_model.pkl."""
+    """Save the trained model to the configured MODEL_PATH."""
     MODEL_PATH.parent.mkdir(exist_ok=True)
     joblib.dump({"feature_version": FEATURE_VERSION, "model": model}, MODEL_PATH)
-
 
 def model_is_current():
     """Return whether the saved artifact matches the current feature semantics."""
