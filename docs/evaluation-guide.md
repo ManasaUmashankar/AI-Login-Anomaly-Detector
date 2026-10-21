@@ -46,6 +46,42 @@ The feature builder also compares historical baselines against strictly earlier 
 - Isolation Forest detects unusual numeric patterns; it does not know whether an event is malicious.
 - Do not report a single metric without naming the dataset, evaluation method, positive class, and limitations.
 
+## Latest recorded run
+
+These results were captured from a local run on 2026-10-21 using 1,588 synthetic login events (1,500 labelled normal and 88 labelled anomalous). Re-run the scripts after changing data, features, thresholds, or model artifacts; these figures describe this run only.
+
+### Chronological holdout windows
+
+Each window used earlier events for training and later events for holdout. Holdout sizes total 953 events. The **39 labelled anomalies** reported in the table are the anomalies within these four holdout windows, not the full dataset; the full 1,588-event dataset contains 88 labelled anomalies.
+
+| Window | Holdout events | Labelled anomalies | ML precision | ML recall | ML F1 | ML FPR | Rule baseline F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 238 | 7 | 1.0000 | 0.7143 | 0.8333 | 0.0000 | 1.0000 |
+| 2 | 238 | 7 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 1.0000 |
+| 3 | 238 | 2 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 1.0000 |
+| 4 | 239 | 23 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 0.9787 |
+| **Unweighted mean** | **953** | **39 across windows** | **1.0000** | **0.9286** | **0.9583** | **0.0000** | **0.9947** |
+
+Unweighted mean accuracy was 0.9979 for Isolation Forest and 0.9990 for the rule baseline. The rule baseline achieved higher mean recall and F1 in this run; this is an important comparison, not a reason to claim either method will perform similarly on real authentication data.
+
+### Controlled synthetic stress test
+
+The stress test reports 34 clearly labelled events for binary metrics; 17 ambiguous events are excluded from those binary metrics and reviewed separately.
+
+| Detector | Precision | Recall | F1 | False-positive rate | Accuracy |
+|---|---:|---:|---:|---:|---:|
+| Isolation Forest | 1.000 | 0.292 | 0.452 | 0.000 | 0.500 |
+| Rule baseline | 1.000 | 0.375 | 0.545 | 0.000 | 0.559 |
+| **Hybrid detector** | **1.000** | **0.500** | **0.667** | **0.000** | **0.647** |
+
+At the scenario level, the rule baseline and hybrid detector each detected all six labelled anomaly scenarios, with no benign scenario flagged in this small test. Scenario-level results are not interchangeable with per-event metrics.
+
+### Synthetic-label alignment audit
+
+The combined risk score at threshold `>= 3` had precision 0.935, recall 0.989, F1 0.961, false-positive rate 0.004, and accuracy 0.996 against the generator's labels. Individual signals varied substantially: for example, new-IP, new-device, and unusual-location signals aligned strongly with labels, while the cross-account failed-login signal did not flag any of the labelled anomalies in this audit.
+
+**Interpretation warning:** the generator may encode the same signals used by the detector into its labels. High alignment can therefore reflect how the synthetic data was constructed, rather than independent evidence of real-world SOC effectiveness. The stress test also shows that event-level recall can be modest even when scenario-level detection is strong.
+
 ## Suggested report template
 
 After running the scripts, record the actual output in a table such as this:
