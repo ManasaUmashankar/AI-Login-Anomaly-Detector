@@ -46,14 +46,13 @@ The feature builder also compares historical baselines against strictly earlier 
 - Isolation Forest detects unusual numeric patterns; it does not know whether an event is malicious.
 - Do not report a single metric without naming the dataset, evaluation method, positive class, and limitations.
 
-
 ## Latest recorded run
 
 These results were captured from a local run on 2026-10-21 using 1,588 synthetic login events (1,500 labelled normal and 88 labelled anomalous). Re-run the scripts after changing data, features, thresholds, or model artifacts; these figures describe this run only.
 
 ### Chronological holdout windows
 
-Each window used earlier events for training and later events for holdout. Holdout sizes total 953 events.
+Each window used earlier events for training and later events for holdout. Holdout sizes total 953 events. The **39 labelled anomalies** reported in the table are the anomalies within these four holdout windows, not the full dataset; the full 1,588-event dataset contains 88 labelled anomalies.
 
 | Window | Holdout events | Labelled anomalies | ML precision | ML recall | ML F1 | ML FPR | Rule baseline F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|
