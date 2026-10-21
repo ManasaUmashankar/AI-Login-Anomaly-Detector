@@ -88,3 +88,24 @@ def test_simultaneous_events_have_order_independent_frequency_and_location_featu
 
     assert by_event(forward) == by_event(reverse)
     assert forward.loc[forward["timestamp"] == pd.Timestamp("2026-09-20 10:01:00"), "login_frequency"].tolist() == [3, 3]
+
+
+def test_tied_historical_baselines_are_independent_of_input_row_order():
+    timestamp = "2026-09-22 10:00:00"
+    later_timestamp = "2026-09-22 10:01:00"
+    tied_events = [
+        make_row(timestamp, USUAL, username="alice"),
+        make_row(timestamp, ODD, username="alice"),
+    ]
+    later_event = make_row(later_timestamp, USUAL, username="alice")
+
+    forward = build_features(make_logs(tied_events + [later_event]))
+    reverse = build_features(make_logs(list(reversed(tied_events)) + [later_event]))
+
+    columns = DIFFERENCE_FLAGS + ["location_change"]
+    def later_features(frame):
+        row = frame.loc[frame["timestamp"] == pd.Timestamp(later_timestamp)].iloc[0]
+        return tuple(int(row[column]) for column in columns)
+
+    assert later_features(forward) == later_features(reverse)
+
