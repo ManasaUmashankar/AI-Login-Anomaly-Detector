@@ -321,7 +321,7 @@ def main():
     print("\nPer-event outcomes:")
     display_events = rows[[
         "scenario", "true_label", "failed_logins_45m", "successful_logins_5m",
-        "login_frequency", "is_new_ip", "is_new_device", "is_unusual_location",
+        "distinct_failed_users_per_ip_15m", "login_frequency", "is_new_ip", "is_new_device", "is_unusual_location",
         "location_change", "risk_score", "ml_anomaly_score", "rule_prediction",
         "ml_prediction", "hybrid_prediction", "rules_correct", "ml_correct",
     ]].copy()
