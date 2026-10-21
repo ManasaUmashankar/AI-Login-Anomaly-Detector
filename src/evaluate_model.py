@@ -1,5 +1,3 @@
-import math
-
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
@@ -58,6 +56,31 @@ def calculate_metrics(y_true, y_pred):
     }
 
 
+def _temporal_group_starts(features):
+    """Return row indices where a new timestamp group begins."""
+    timestamps = features["timestamp"].reset_index(drop=True)
+    if timestamps.empty:
+        return []
+    return [0] + [
+        index for index in range(1, len(timestamps))
+        if timestamps.iloc[index] != timestamps.iloc[index - 1]
+    ]
+
+
+def _choose_temporal_train_group(features, train_fraction, minimum_future_groups):
+    """Choose a row-count-near split without separating equal timestamps."""
+    group_starts = _temporal_group_starts(features)
+    candidates = [
+        group_index for group_index in range(1, len(group_starts))
+        if group_starts[group_index] >= 2
+        and len(group_starts) - group_index >= minimum_future_groups
+    ]
+    if not candidates:
+        raise ValueError("Not enough distinct timestamps for the requested temporal split.")
+    target_rows = len(features) * train_fraction
+    return min(candidates, key=lambda group_index: abs(group_starts[group_index] - target_rows))
+
+
 def evaluate_temporal_holdout(df, train_fraction=0.70):
     """Train on earlier logins and evaluate only on later, unseen logins."""
     if "true_label" not in df.columns:
@@ -76,8 +99,11 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
         raise ValueError("At least four valid login rows are required for a temporal holdout.")
 
     features = build_features(cleaned)
-    split_at = math.floor(len(features) * train_fraction)
-    split_at = min(max(split_at, 2), len(features) - 1)
+    group_starts = _temporal_group_starts(features)
+    train_group = _choose_temporal_train_group(
+        features, train_fraction, minimum_future_groups=1
+    )
+    split_at = group_starts[train_group]
 
     train_features = features.iloc[:split_at]
     test_features = features.iloc[split_at:]
@@ -123,18 +149,24 @@ def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
     cleaned = preprocess_logs(working)
     features = build_features(cleaned)
 
-    total_rows = len(features)
-    initial_train_rows = math.floor(total_rows * train_fraction)
-    remaining_rows = total_rows - initial_train_rows
-    if initial_train_rows < 2 or remaining_rows < windows:
-        raise ValueError("Not enough valid rows for the requested temporal windows.")
+    group_starts = _temporal_group_starts(features)
+    initial_train_group = _choose_temporal_train_group(
+        features, train_fraction, minimum_future_groups=windows
+    )
+    remaining_groups = len(group_starts) - initial_train_group
+    boundaries = [
+        initial_train_group + (index * remaining_groups) // windows
+        for index in range(windows + 1)
+    ]
 
     results = []
     for index in range(windows):
-        test_start = initial_train_rows + math.floor(index * remaining_rows / windows)
-        test_end = initial_train_rows + math.floor((index + 1) * remaining_rows / windows)
-        if test_end <= test_start:
-            raise ValueError("Each temporal holdout window must contain at least one row.")
+        test_start = group_starts[boundaries[index]]
+        test_end = (
+            group_starts[boundaries[index + 1]]
+            if boundaries[index + 1] < len(group_starts)
+            else len(features)
+        )
 
         train_features = features.iloc[:test_start]
         test_features = features.iloc[test_start:test_end]
