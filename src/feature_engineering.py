@@ -104,19 +104,27 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * radius * asin(sqrt(min(1.0, max(0.0, a))))
 
 def add_impossible_travel(df, threshold_kmh=900.0):
+    """Flag implausible travel between trusted, coordinate-bearing successes."""
+    df = df.copy()
+    for column in ("latitude", "longitude"):
+        if column not in df.columns:
+            df[column] = float("nan")
+        df[column] = pd.to_numeric(df[column], errors="coerce")
     flags = pd.Series(0, index=df.index, dtype="int64"); speeds = pd.Series(0.0, index=df.index, dtype="float64")
     for _, group in df.sort_values(["username", "timestamp"], kind="stable").groupby("username", sort=False):
         previous = None
         for _, batch in group.groupby("timestamp", sort=True):
             for idx, row in batch[batch["login_status"] == "success"].iterrows():
+                is_incoming = bool(row.get("_incoming_event", False))
                 if previous is not None:
                     elapsed = (row["timestamp"] - previous["timestamp"]).total_seconds() / 3600
                     coords = [previous.get("latitude"), previous.get("longitude"), row.get("latitude"), row.get("longitude")]
                     if elapsed > 0 and all(pd.notna(v) for v in coords):
                         speed = _haversine_km(float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])) / elapsed
                         speeds.loc[idx] = speed; flags.loc[idx] = int(speed > threshold_kmh)
-                # Incoming events never become trusted location baselines.
-                previous = row
+                # Incoming events are scored against history but never poison the trusted baseline.
+                if not is_incoming:
+                    previous = row
     df["travel_speed_kmh"] = speeds; df["impossible_travel"] = flags
     return df
 
