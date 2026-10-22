@@ -191,7 +191,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | 3 to 5 | Medium |
 | 6 and above | High |
 
-The configured signal points sum to a theoretical maximum of 22 when all ten scoring signals fire. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
+With the two added +3 signals (slow brute force and impossible travel), the current configured maximum is 28 points. The original ten signals alone sum to 22. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
 
 > **These points and levels are project-specific design choices, not cybersecurity standards.** They exist to rank alerts. SOC analysts have limited time, and not every alert has the same severity, so scoring helps them look at the most serious events first.
 
@@ -433,6 +433,28 @@ Authentication logs -> Log collection -> Preprocessing / normalisation
 | Dashboard | Analyst monitoring console |
 
 It is **much simpler** than a real SIEM such as Splunk. It does not collect live logs, has no alert workflow, and is **not** a complete SIEM.
+
+## MITRE ATT&CK Mapping
+
+This is a conceptual mapping of defensive detections to ATT&CK techniques, not a claim of complete technique coverage:
+
+| Detection | ATT&CK technique | Rationale and caveat |
+|---|---|---|
+| Repeated authentication failures, password guessing and slow brute force | [T1110 — Brute Force](https://attack.mitre.org/techniques/T1110/) | Failure patterns may be consistent with brute force; legitimate typos and shared egress can also trigger alerts. |
+| Successful login from a new context or after repeated failures | [T1078 — Valid Accounts](https://attack.mitre.org/techniques/T1078/) | Unusual successful authentication may warrant investigation; this detector cannot prove credential compromise. |
+
+Impossible travel and unusual device/location are behavioural analytics signals, not standalone proof of a specific ATT&CK technique.
+
+## What I Found
+
+The first synthetic dataset was too easy: the single field `device == "Unknown Device"` achieved F1 = 1.0 against its generated labels. That meant a trivial shortcut could appear perfect without learning meaningful authentication behaviour.
+
+I rebuilt the generator to mix legitimate VPN-like IP changes, travel, new devices, late-night work and typo bursts with attacks that can use familiar devices or normal-looking IPs. The new design adds 36 users, 60 days, and scenario IDs. **The rebuild is a hypothesis, not a result:** run `python -m src.robust_evaluation --seeds 20` and inspect the single-field baselines before claiming the shortcut has been eliminated. The results are not yet a public-data or production benchmark.
+
+## Public Dataset Validation
+
+A candidate for external exploration is the [LANL User-Computer Authentication Associations in Time dataset](https://csr.lanl.gov/data/auth/). The publisher states that it contains anonymized successful user-to-computer authentication events over nine continuous months and waives copyright to the extent possible under law. It contains successful events only, so it does **not** provide a labelled attack test set or failed-login sequences; it can test behaviour-feature compatibility but cannot validate attack detection metrics. Cite the dataset if you use it.
+
 
 ## Disclaimer
 
