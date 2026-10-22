@@ -10,14 +10,14 @@ from src.utils import MODEL_PATH
 
 # The columns the model is allowed to look at (all numbers)
 MODEL_FEATURES = [
-    "login_hour", "is_new_ip", "is_new_device",
+    "login_hour", "is_new_ip", "is_new_device", "failed_logins_6h", "impossible_travel",
     "is_unusual_hour", "is_unusual_location", "login_frequency", "location_change",
     "failed_logins_45m", "successful_logins_5m",
 ]
 
 # Model settings (project choices, not universal standards)
 N_TREES = 100
-CONTAMINATION = 0.05     # our guess: about 5% of rows are anomalous
+CONTAMINATION = "auto"  # avoid assuming a fixed anomaly prevalence
 RANDOM_STATE = 42        # makes the result the same every run
 FEATURE_VERSION = 4      # rolling-window features added to the model inputs
 
