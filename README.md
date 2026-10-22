@@ -479,7 +479,7 @@ Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark.
 
 ## Controlled Edge-Case Stress Test
 
-Run a second, deliberately difficult evaluation separately from the original 1,588-row baseline:
+The following stress test is a legacy diagnostic against the original 1,588-row dataset; it does not evaluate the rebuilt generator. Run it separately:
 
 ```bash
 python -m src.stress_test_evaluation
