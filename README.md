@@ -456,7 +456,16 @@ I rebuilt the generator to mix legitimate VPN-like IP changes, travel, new devic
 
 ## Public Dataset Validation
 
-A candidate for external exploration is the [LANL User-Computer Authentication Associations in Time dataset](https://csr.lanl.gov/data/auth/). The publisher states that it contains anonymized successful user-to-computer authentication events over nine continuous months and waives copyright to the extent possible under law. It contains successful events only, so it does **not** provide a labelled attack test set or failed-login sequences; it can test behaviour-feature compatibility but cannot validate attack detection metrics. Cite the dataset if you use it.
+A candidate for external exploration is the [LANL User-Computer Authentication Associations in Time dataset](https://csr.lanl.gov/data/auth/). The publisher describes anonymized successful user-to-computer authentication events over nine continuous months and states that copyright is waived to the extent possible under law. It contains successful events only, so it does **not** provide labelled attacks or failed-login sequences; it can test feature compatibility and scoring stability but cannot validate attack-detection metrics.
+
+After downloading a LANL `.bz2` data file, prepare a bounded sample (the script defaults to 100,000 rows):
+
+```powershell
+python -m src.prepare_lanl_sample --input path/to/lanl-auth-dataset-1-00.bz2 --rows 100000
+python -m src.anomaly_detector --input data/lanl_auth_sample_holdout.csv --history data/lanl_auth_sample_history.csv
+```
+
+The adapter does not invent IP addresses, coordinates, failed events, or labels. The timestamp origin is an arbitrary ordering anchor because the source publishes relative time offsets. **This external-data run remains unverified until you execute these commands locally**; no real-data results are claimed in this repository change.
 
 
 ## Disclaimer
