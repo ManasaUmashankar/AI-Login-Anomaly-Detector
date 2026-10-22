@@ -201,7 +201,7 @@ The project uses **unsupervised learning**: the model is trained without labels,
 
 The model uses eleven numeric features: `login_hour`, `is_new_ip`, `is_new_device`, `failed_logins_6h`, `impossible_travel`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The rolling windows and travel estimate are project-specific signals, not proof of malicious intent.
 
-The trained model is saved with Joblib to `models/anomaly_model_v4.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
+The trained model is saved to the path configured in `src/utils.py` (currently `models/anomaly_model.pkl`). The Joblib artifact records both a feature-version marker and the ordered feature-name list. If the artifact is missing, unreadable, or has an outdated schema, the pipeline retrains it before scoring.
 
 > `.pkl` (pickle) files can run code when loaded. Only load model files from sources you trust.
 
@@ -209,7 +209,7 @@ The trained model is saved with Joblib to `models/anomaly_model_v4.pkl`, so the 
 
 Isolation Forest builds many random decision trees. Each tree repeatedly picks a **random feature** and a **random cut point** to split the data. A login that is very different from the others is separated after **few cuts** (a short path), while a typical login needs **many cuts**. Shorter average paths mean more anomalous.
 
-Settings used: 100 trees, `contamination = "auto"` (a threshold setting, not a prevalence estimate), and an explicit random seed for reproducibility. The robust evaluator also reports PR-AUC from continuous anomaly scores. Rows with a `decision_function` score below 0 are labelled `Anomalous`.
+Pipeline settings: 100 trees, `contamination = 0.05` (an explicit 5% training-set anomaly budget, not a calibrated probability), and a fixed random seed for reproducibility. The robust evaluator separately sweeps contamination values of 1%, 3%, 5%, and 10%, and reports PR-AUC from continuous anomaly scores. Rows with a `decision_function` score below 0 are labelled `Anomalous`.
 
 The model does **not understand hacking**. It only finds numerically unusual patterns in the features it is given. That is why the number of anomalies is largely set by the `contamination` guess.
 
@@ -233,23 +233,32 @@ AI-Login-Anomaly-Detector/
 │   └── login_logs.csv
 ├── src/
 │   ├── __init__.py
-│   ├── generate_dataset.py      # creates the synthetic logs
-│   ├── read_dataset.py          # loads and explores logs (Pandas)
-│   ├── preprocessing.py         # cleaning and validation
-│   ├── feature_engineering.py   # turns logs into features
-│   ├── detection_rules.py       # rules and risk scoring
-│   ├── anomaly_detector.py      # Isolation Forest and combined pipeline
-│   ├── audit_label_alignment.py # audits rule/label overlap
-│   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
-│   └── utils.py                 # shared file paths
+│   ├── generate_dataset.py        # creates reproducible synthetic logs
+│   ├── read_dataset.py            # loads and explores logs
+│   ├── preprocessing.py           # cleaning and validation
+│   ├── feature_engineering.py     # historical and rolling features
+│   ├── detection_rules.py         # explainable rules and risk scoring
+│   ├── anomaly_detector.py        # Isolation Forest and full pipeline
+│   ├── evaluate_model.py          # chronological holdout and windows
+│   ├── robust_evaluation.py       # multi-seed and baseline comparisons
+│   ├── audit_label_alignment.py   # synthetic label/rule audit
+│   ├── stress_test_evaluation.py  # controlled edge-case stress tests
+│   ├── score_events.py            # score unseen events with history
+│   ├── prepare_lanl_sample.py     # optional public-data adapter
+│   └── utils.py                   # shared file paths
 ├── models/
-│   └── anomaly_model_v3.pkl
+│   └── anomaly_model.pkl
 ├── dashboard/
 │   └── app.py
-├── notebooks/                   # reserved for exploration notebooks
+├── notebooks/                     # exploration notebooks
 ├── tests/
 │   ├── test_detector.py
-│   └── test_stress_test_evaluation.py
+│   ├── test_historical_baselines.py
+│   ├── test_label_audit.py
+│   ├── test_risk_reason_composition.py
+│   ├── test_score_events.py
+│   ├── test_stress_test_evaluation.py
+│   └── test_v2_detection_features.py
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -304,7 +313,7 @@ Exact labels and counts can change with the dataset and pipeline output. The das
 
 ## Dashboard Screenshots
 
-Capture the running dashboard and save the four screenshots at these exact paths before presenting the project: `docs/images/dashboard-overview.jpg`, `docs/images/alert-queue.jpg`, `docs/images/severity-filter.jpg`, and `docs/images/alert-investigation.jpg`. If these files are absent from a checkout, the screenshot links will not render.
+Before publishing, capture the running dashboard and add these four screenshots at the exact paths below. The image links remain pending until the files are committed to the repository: `docs/images/dashboard-overview.jpg`, `docs/images/alert-queue.jpg`, `docs/images/severity-filter.jpg`, and `docs/images/alert-investigation.jpg`.
 
 
 The Streamlit dashboard provides a compact SOC-style workflow: review authentication trends, prioritize the alert queue, and inspect the context behind an individual event.
