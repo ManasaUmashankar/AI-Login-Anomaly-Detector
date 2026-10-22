@@ -77,7 +77,9 @@ def main():
     data = load_logs(include_labels=True)
     all_runs = pd.concat([evaluate(seed, data, windows=args.windows) for seed in range(args.seeds)], ignore_index=True)
     event = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)).isna()]
-    summary = event.groupby("method")[["precision", "recall", "f1", "pr_auc"]].agg(["mean", "std"]).round(4)
+    # First average chronological windows within each seed, then summarize the 20 seed-level values.
+    per_seed = event.groupby(["seed", "method"])[["precision", "recall", "f1", "pr_auc"]].mean().reset_index()
+    summary = per_seed.groupby("method")[["precision", "recall", "f1", "pr_auc"]].agg(["mean", "std"]).round(4)
     output = Path(args.output); output.parent.mkdir(parents=True, exist_ok=True)
     all_runs.to_csv(output, index=False)
     summary.to_csv(output.with_name(output.stem + "-summary.csv"))
