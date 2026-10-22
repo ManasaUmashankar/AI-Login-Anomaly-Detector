@@ -8,6 +8,7 @@ Run from the repository root with the project's virtual environment active:
 
 ```powershell
 python -m src.evaluate_model
+python -m src.robust_evaluation --seeds 20
 python -m src.audit_label_alignment
 python -m src.stress_test_evaluation
 python -m pytest -v
@@ -17,6 +18,14 @@ python -m pytest -v
 - `src.audit_label_alignment` checks how individual signals and the combined risk-score baseline align with labels created by the synthetic data generator.
 - `src.stress_test_evaluation` tests a separate set of controlled edge-case events, including benign, suspicious, and ambiguous scenarios.
 - `pytest` runs the regression suite.
+
+## Reproducible multi-seed report
+
+`python -m src.robust_evaluation --seeds 20` writes per-seed/per-window rows to `reports/robust-evaluation.csv` and a mean/standard-deviation summary to `reports/robust-evaluation-summary.csv`. It compares single-field baselines, rules-only, Isolation Forest and a diagnostic hybrid. PR-AUC is calculated from continuous anomaly scores for ML-only results; it is not dependent on a chosen binary contamination threshold.
+
+Scenario-level detection rate counts a scenario as detected if at least one clearly anomalous event in that scenario is flagged. Time-to-detect is the delay from the first labelled anomalous event in the scenario to its first alert. Scenarios without an alert have no finite time-to-detect and must be reported as missed, not silently removed from the detection-rate denominator.
+
+The report is a code path, not a verified result until it has been run locally. Do not state that all single-field baselines are below F1 0.7 unless the generated report confirms it.
 
 ## What the metrics mean
 
