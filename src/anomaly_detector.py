@@ -17,7 +17,7 @@ MODEL_FEATURES = [
 
 # Model settings (project choices, not universal standards)
 N_TREES = 100
-CONTAMINATION = "auto"  # avoid assuming a fixed anomaly prevalence
+CONTAMINATION = 0.05  # explicit 5% training-set anomaly budget; not a calibrated probability
 RANDOM_STATE = 42        # makes the result the same every run
 FEATURE_VERSION = 4      # rolling-window features added to the model inputs
 
