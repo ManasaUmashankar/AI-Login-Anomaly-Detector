@@ -114,31 +114,15 @@ def preprocess_logs(df):
 def demo_messy_data():
     """Create a small dataset with deliberate data-quality issues."""
     rows = [
-        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11",
-         "Mumbai, India", "Windows Laptop", "SUCCESS", 0,
-         "Chrome on Windows", "s1"],
-        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11",
-         "Mumbai, India", "Windows Laptop", "SUCCESS", 0,
-         "Chrome on Windows", "s1"],
-        ["not-a-date", "bob", "203.0.113.12",
-         "Pune, India", "MacBook", "success", 0,
-         "Safari on Mac", "s2"],
-        ["2026-09-01 10:00:00", "charlie", "203.0.113.13",
-         None, "Android Phone", "success", 0,
-         "Chrome on Android", "s3"],
-        ["2026-09-01 11:00:00", "diana", "203.0.113.14",
-         "Bengaluru, India", "Windows Laptop", "success", None,
-         "Chrome on Windows", "s4"],
-        ["2026-09-01 12:00:00", "bob", "203.0.113.12",
-         "Pune, India", "MacBook", "maybe", 0,
-         "Safari on Mac", "s5"],
-        ["2026-09-01 03:00:00", "alice", "198.51.100.23",
-         "Moscow, Russia", "Unknown Device", "failed", 12,
-         "python-requests", "s6"],
+        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11", "Mumbai, India", "Windows Laptop", "SUCCESS", "Chrome on Windows", "s1"],
+        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11", "Mumbai, India", "Windows Laptop", "SUCCESS", "Chrome on Windows", "s1"],
+        ["not-a-date", "bob", "203.0.113.12", "Pune, India", "MacBook", "success", "Safari on Mac", "s2"],
+        ["2026-09-01 10:00:00", "charlie", "203.0.113.13", None, "Android Phone", "success", "Chrome on Android", "s3"],
+        ["2026-09-01 11:00:00", "diana", "203.0.113.14", "Bengaluru, India", "Windows Laptop", "success", "Chrome on Windows", "s4"],
+        ["2026-09-01 12:00:00", "bob", "203.0.113.12", "Pune, India", "MacBook", "maybe", "Safari on Mac", "s5"],
+        ["2026-09-01 03:00:00", "alice", "198.51.100.23", "Moscow, Russia", "Windows Laptop", "failed", "Chrome on Windows", "s6"],
     ]
-
     return pd.DataFrame(rows, columns=REQUIRED_COLUMNS)
-
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "demo":
