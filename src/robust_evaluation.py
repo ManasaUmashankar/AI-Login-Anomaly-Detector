@@ -40,13 +40,16 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         if end_time is not None: test = test[test["timestamp"] < end_time].copy()
         if train.empty or test.empty or test["true_label"].nunique() < 2: continue
         y = (test["true_label"] == "anomaly").astype(int)
-        model = train_model(train, seed=seed)
-        score = -model.decision_function(test[MODEL_FEATURES])
-        ml = (score >= 0).astype(int)
+        model = train_model(train, seed=seed, contamination="auto")
+        score = -model.score_samples(test[MODEL_FEATURES])
+        ml = (model.predict(test[MODEL_FEATURES]) == -1).astype(int)
         rule_result = apply_risk_scores(apply_rules(test.copy()))
         rules = (rule_result["risk_score"] >= 3).astype(int)
         hybrid = ((ml == 1) | (rules.to_numpy() == 1)).astype(int)
         methods = {"single_field_device": _single_field(train, test, "device"), "single_field_ip": _single_field(train, test, "ip_address"), "single_field_location": _single_field(train, test, "location"), "single_field_user_agent": _single_field(train, test, "user_agent"), "single_field_status": _single_field(train, test, "login_status"), "rules_only": rules, "ml_only": ml, "hybrid": hybrid}
+        for contamination in (0.01, 0.03, 0.05, 0.10):
+            sweep_model = train_model(train, seed=seed, contamination=contamination)
+            methods[f"ml_contamination_{contamination:.2f}"] = (sweep_model.predict(test[MODEL_FEATURES]) == -1).astype(int)
         for method, pred in methods.items():
             m = _metrics(y, pred)
             row = {"seed": seed, "window": w + 1, "method": method, **m, "pr_auc": float(average_precision_score(y, score)) if method == "ml_only" else np.nan}
