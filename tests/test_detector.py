@@ -302,7 +302,7 @@ def test_final_status_table(level, ml, expected):
 
 def test_model_flags_an_obvious_outlier():
     frame = make_ml_frame()
-    result = apply_model(train_model(frame), frame)
+    result = apply_model(train_model(frame, contamination=0.05), frame)
     assert set(result["ml_result"]) <= {"Anomalous", "Normal"}
     assert result.iloc[-1]["ml_result"] == "Anomalous"
     assert result.iloc[-1]["anomaly_score"] < 0
@@ -407,7 +407,7 @@ def test_multi_window_evaluation_uses_expanding_chronological_training(monkeypat
 def test_temporal_splits_never_separate_equal_timestamps(monkeypatch):
     from src.evaluate_model import evaluate_temporal_holdout, evaluate_temporal_windows
 
-    monkeypatch.setattr("src.evaluate_model.train_model", lambda frame: object())
+    monkeypatch.setattr("src.evaluate_model.train_model", lambda frame, seed=42: object())
     monkeypatch.setattr(
         "src.evaluate_model.apply_model",
         lambda model, frame: pd.DataFrame({"ml_result": ["Normal"] * len(frame)}),
