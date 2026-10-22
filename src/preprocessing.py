@@ -6,7 +6,7 @@ from src.read_dataset import load_logs
 
 REQUIRED_COLUMNS = [
     "timestamp", "username", "ip_address", "location", "device",
-    "login_status", "failed_attempts", "user_agent", "session_id",
+    "login_status", "user_agent", "session_id",
 ]
 
 # Optional column used only to evaluate the synthetic dataset.
@@ -73,10 +73,9 @@ def remove_duplicates(df):
 
 
 def validate_values(df):
-    """Remove invalid login statuses and negative failure counts."""
+    """Remove invalid login statuses."""
     valid = (
         df["login_status"].isin(VALID_STATUSES)
-        & (df["failed_attempts"] >= 0)
     )
 
     removed = int((~valid).sum())
@@ -86,13 +85,15 @@ def validate_values(df):
 def preprocess_logs(df):
     """Clean login logs and preserve optional ground-truth labels."""
     df = df.copy()
+    for column in ("latitude", "longitude", "scenario_id"):
+        if column not in df.columns:
+            df[column] = float("nan") if column != "scenario_id" else ""
     check_required_columns(df)
 
     rows_at_start = len(df)
     missing_found = int(df.isna().sum().sum())
 
     df = clean_text_columns(df)
-    df = fix_failed_attempts(df)
     df, bad_timestamps = fix_timestamps(df)
     df, duplicates = remove_duplicates(df)
     df, bad_values = validate_values(df)
@@ -113,31 +114,15 @@ def preprocess_logs(df):
 def demo_messy_data():
     """Create a small dataset with deliberate data-quality issues."""
     rows = [
-        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11",
-         "Mumbai, India", "Windows Laptop", "SUCCESS", 0,
-         "Chrome on Windows", "s1"],
-        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11",
-         "Mumbai, India", "Windows Laptop", "SUCCESS", 0,
-         "Chrome on Windows", "s1"],
-        ["not-a-date", "bob", "203.0.113.12",
-         "Pune, India", "MacBook", "success", 0,
-         "Safari on Mac", "s2"],
-        ["2026-09-01 10:00:00", "charlie", "203.0.113.13",
-         None, "Android Phone", "success", 0,
-         "Chrome on Android", "s3"],
-        ["2026-09-01 11:00:00", "diana", "203.0.113.14",
-         "Bengaluru, India", "Windows Laptop", "success", None,
-         "Chrome on Windows", "s4"],
-        ["2026-09-01 12:00:00", "bob", "203.0.113.12",
-         "Pune, India", "MacBook", "maybe", 0,
-         "Safari on Mac", "s5"],
-        ["2026-09-01 03:00:00", "alice", "198.51.100.23",
-         "Moscow, Russia", "Unknown Device", "failed", 12,
-         "python-requests", "s6"],
+        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11", "Mumbai, India", "Windows Laptop", "SUCCESS", "Chrome on Windows", "s1"],
+        ["2026-09-01 09:00:00", "Alice ", "203.0.113.11", "Mumbai, India", "Windows Laptop", "SUCCESS", "Chrome on Windows", "s1"],
+        ["not-a-date", "bob", "203.0.113.12", "Pune, India", "MacBook", "success", "Safari on Mac", "s2"],
+        ["2026-09-01 10:00:00", "charlie", "203.0.113.13", None, "Android Phone", "success", "Chrome on Android", "s3"],
+        ["2026-09-01 11:00:00", "diana", "203.0.113.14", "Bengaluru, India", "Windows Laptop", "success", "Chrome on Windows", "s4"],
+        ["2026-09-01 12:00:00", "bob", "203.0.113.12", "Pune, India", "MacBook", "maybe", "Safari on Mac", "s5"],
+        ["2026-09-01 03:00:00", "alice", "198.51.100.23", "Moscow, Russia", "Windows Laptop", "failed", "Chrome on Windows", "s6"],
     ]
-
     return pd.DataFrame(rows, columns=REQUIRED_COLUMNS)
-
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "demo":

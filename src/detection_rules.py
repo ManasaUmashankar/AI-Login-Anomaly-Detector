@@ -9,6 +9,7 @@ RAPID_LOGIN_THRESHOLD = 5
 FAILED_LOGIN_WINDOW_THRESHOLD = 5
 RAPID_SUCCESS_WINDOW_THRESHOLD = 5
 FAILED_USERS_PER_SOURCE_THRESHOLD = 4
+SLOW_BRUTE_FORCE_THRESHOLD = 8
 
 # NEW (Stage 7): risk levels (also project-specific)
 LOW_MAX_SCORE = 2        # 0 to 2 = Low
@@ -17,13 +18,13 @@ MEDIUM_MAX_SCORE = 5     # 3 to 5 = Medium, 6 and above = High
 
 def rule_multiple_failures(df):
     """Rule 1: many failed attempts in a row."""
-    return df["failed_attempts"] >= FAILED_ATTEMPTS_THRESHOLD
+    return df["failed_logins_45m"] >= FAILED_ATTEMPTS_THRESHOLD
 
 
 def rule_success_after_failures(df):
     """Rule 2: a successful login that came after repeated failures."""
     is_success = df["login_status"] == "success"
-    had_failures = df["failed_attempts"] >= FAILURES_BEFORE_SUCCESS_THRESHOLD
+    had_failures = df["failed_logins_45m"] >= FAILURES_BEFORE_SUCCESS_THRESHOLD
     return is_success & had_failures
 
 
@@ -57,6 +58,16 @@ def rule_password_spray_source(df):
     return df["distinct_failed_users_per_ip_15m"] >= FAILED_USERS_PER_SOURCE_THRESHOLD
 
 
+def rule_slow_brute_force(df):
+    """Flag repeated failures accumulated over a six-hour window."""
+    return df["failed_logins_6h"] >= SLOW_BRUTE_FORCE_THRESHOLD
+
+
+def rule_impossible_travel(df):
+    """Flag a successful login requiring more than 900 km/h travel."""
+    return (df["login_status"] == "success") & (df["impossible_travel"] == 1)
+
+
 # Each rule = (reason text, function that checks it)
 RULES = [
     ("Multiple failed login attempts", rule_multiple_failures),
@@ -67,6 +78,8 @@ RULES = [
     ("Repeated failed logins within 45 minutes", rule_repeated_failures_in_window),
     ("Rapid successful login burst", rule_rapid_successes),
     ("Failed logins against multiple accounts from one source", rule_password_spray_source),
+    ("Slow brute-force pattern within six hours", rule_slow_brute_force),
+    ("Impossible travel between successful logins", rule_impossible_travel),
 ]
 
 
@@ -99,19 +112,34 @@ RISK_SIGNALS = [
     ("Repeated failures within 45 minutes", 3, rule_repeated_failures_in_window),
     ("Rapid successful logins within 5 minutes", 3, rule_rapid_successes),
     ("Multiple accounts failed from one source within 15 minutes", 3, rule_password_spray_source),
+    ("Repeated failures within six hours", 3, rule_slow_brute_force),
+    ("Impossible travel between successful logins", 3, rule_impossible_travel),
 ]
 
 
 def apply_rules(df):
-    """Run every rule. Adds 'rules_triggered' (a count) and 'detection_reasons' (text)."""
+    """Run detection rules and explain every signal that contributes risk."""
     df = df.copy()
+    for column, default in (("failed_logins_6h", 0), ("impossible_travel", 0), ("travel_speed_kmh", 0.0)):
+        if column not in df.columns:
+            df[column] = default
     df["rules_triggered"] = 0
     df["detection_reasons"] = ""
 
     for reason, rule_function in RULES:
-        hit = rule_function(df)                  # True/False for every row
+        hit = rule_function(df).fillna(False).astype(bool)
         df["rules_triggered"] += hit.astype(int)
         df.loc[hit, "detection_reasons"] += reason + "; "
+
+    # Risk signals are not all full detection rules (for example, a new IP
+    # alone adds points). Explain these too, so a Medium score never lacks
+    # context simply because no combined rule fired.
+    for reason, _points, signal_function in RISK_SIGNALS:
+        hit = signal_function(df).fillna(False).astype(bool)
+        already_explained = df["detection_reasons"].str.contains(
+            reason, regex=False, na=False
+        )
+        df.loc[hit & ~already_explained, "detection_reasons"] += reason + "; "
 
     df["detection_reasons"] = df["detection_reasons"].str.rstrip("; ")
     return df
@@ -131,6 +159,9 @@ def risk_level_for(score):
 def apply_risk_scores(df):
     """Add 'risk_score' (points added up) and 'risk_level' (Low/Medium/High)."""
     df = df.copy()
+    for column, default in (("failed_logins_6h", 0), ("impossible_travel", 0), ("travel_speed_kmh", 0.0)):
+        if column not in df.columns:
+            df[column] = default
     df["risk_score"] = 0
 
     for name, points, signal_function in RISK_SIGNALS:

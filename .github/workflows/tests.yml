@@ -2,9 +2,6 @@ name: Python tests
 
 on:
   push:
-    branches:
-      - main
-      - feature/multi-window-temporal-evaluation
   pull_request:
     branches:
       - main

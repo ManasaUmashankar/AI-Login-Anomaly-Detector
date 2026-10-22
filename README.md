@@ -1,6 +1,9 @@
 # AI Login Anomaly Detector
 
-An educational **Blue Team** project that analyses synthetic login logs and flags *potentially suspicious* authentication behaviour using explainable rules, risk scoring, and machine learning (Isolation Forest).
+A defensive Blue Team prototype for triaging authentication events.
+It combines explainable detection rules, risk scoring, and Isolation Forest.
+The Streamlit dashboard helps an analyst inspect why an event was flagged.
+Evaluation uses synthetic scenarios; results are diagnostic, not production evidence.
 
 > **Important:** an anomaly is a signal to investigate, not proof of an attack. This project uses synthetic data only and is not a production security tool.
 
@@ -121,35 +124,29 @@ data/login_logs.csv
 
 ## Dataset
 
-The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
+The primary dataset is synthetic and contains no real credentials or personal data. `src/generate_dataset.py` creates a reproducible dataset with 36 users over 60 days, benign VPN-like IP changes, new devices, travel, late-night work, typo bursts, and multiple attack scenarios. Each scenario has a `scenario_id`; latitude and longitude support impossible-travel experiments.
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users. The random seed is fixed, so the data is identical on every run.
+```powershell
+python -m src.generate_dataset --seed 42
+```
 
 | Column | Meaning |
 |---|---|
-| `timestamp` | Date and time of the login attempt |
-| `username` | Account used |
-| `ip_address` | Source IP address |
-| `location` | Approximate location of the IP |
-| `device` | Device type |
+| `timestamp`, `username` | Event time and account |
+| `ip_address`, `location`, `latitude`, `longitude` | Source network and coarse location context |
+| `device`, `user_agent` | Client context |
 | `login_status` | `success` or `failed` |
-| `failed_attempts` | Number of failures in the current sequence |
-| `user_agent` | Browser or program identifier |
-| `session_id` | Unique ID for the attempt |
+| `session_id` | Event identifier |
+| `true_label` | Synthetic evaluation label; never a model input |
+| `scenario_id` | Groups events belonging to a designed scenario |
 
-**Normal behaviour (1,500 records):** familiar IP, device, and location, working hours, mostly successful logins, with an occasional typo.
-
-**Suspicious behaviour planted (88 records):**
-
-- 5 brute-force-style runs (6 to 12 fast failures, 3 of them ending in a success)
-- 8 unusual logins (new IP, new device, foreign location, 1 to 4 AM)
-- 4 rapid-login bursts (6 logins in about a minute)
+Labels are synthetic assumptions, not independent ground truth. The generator is designed to reduce easy single-field shortcuts, but that must be verified by the evaluation report before claiming the baseline requirement is met.
 
 ## Detection Methodology
 
 1. **Preprocessing:** fix types, clean text, remove exact duplicates and unreadable rows. Unusual but valid rows are always kept.
 2. **Feature engineering:** turn raw fields into signals such as "is this IP different from the user's usual IP?".
-3. **Rules:** check each login against five explainable rules.
+3. **Rules:** check each login against explainable rules.
 4. **Risk scoring:** add up points for each signal to get a score and a level.
 5. **Machine learning:** Isolation Forest scores how unusual each login is.
 6. **Combination:** merge the risk level and the ML result into one final status.
@@ -165,6 +162,9 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | Rapid login attempts | 5 or more attempts by one user within 5 minutes |
 | Repeated failed logins within 45 minutes | 5 or more failed events in the trailing 45-minute window |
 | Rapid successful login burst | 5 or more successful events in the trailing 5-minute window |
+| Password spraying | Failures against 4 or more distinct accounts from one source IP within 15 minutes |
+| Slow brute force | 8 or more failures accumulated over 6 hours |
+| Impossible travel | Successful logins imply travel faster than 900 km/h between known coordinates |
 
 Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the most common IP, device, and location in earlier login history only. Events with the same timestamp share one baseline, and a user's first observed timestamp has no historical baseline yet.
 
@@ -181,6 +181,9 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | Unusual login hour | +1 |
 | Repeated failures within 45 minutes | +3 |
 | Rapid successful logins within 5 minutes | +3 |
+| Multiple accounts failed from one source within 15 minutes | +3 |
+| Repeated failures within six hours | +3 |
+| Impossible travel between successful logins | +3 |
 
 | Total score | Level |
 |---|---|
@@ -188,7 +191,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | 3 to 5 | Medium |
 | 6 and above | High |
 
-The highest possible score is 19. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
+With the two added +3 signals (slow brute force and impossible travel), the current configured maximum is 28 points. The original ten signals alone sum to 22. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
 
 > **These points and levels are project-specific design choices, not cybersecurity standards.** They exist to rank alerts. SOC analysts have limited time, and not every alert has the same severity, so scoring helps them look at the most serious events first.
 
@@ -196,9 +199,9 @@ The highest possible score is 19. The rolling-window signals overlap intentional
 
 The project uses **unsupervised learning**: the model is trained without labels, because in real environments labelled attacks are rare and attack patterns keep changing. The planted suspicious rows are used only afterwards to sanity-check results.
 
-The model sees ten numeric features: `login_hour`, `failed_attempts`, `is_new_ip`, `is_new_device`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. The last two expose recent failure and success bursts directly to the model, rather than leaving those patterns to the rule layer alone. They are project-specific rolling windows, not proof of malicious intent.
+The model uses eleven numeric features: `login_hour`, `is_new_ip`, `is_new_device`, `failed_logins_6h`, `impossible_travel`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The rolling windows and travel estimate are project-specific signals, not proof of malicious intent.
 
-The trained model is saved with Joblib to `models/anomaly_model_v3.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
+The trained model is saved with Joblib to `models/anomaly_model_v4.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
 
 > `.pkl` (pickle) files can run code when loaded. Only load model files from sources you trust.
 
@@ -206,7 +209,7 @@ The trained model is saved with Joblib to `models/anomaly_model_v3.pkl`, so the 
 
 Isolation Forest builds many random decision trees. Each tree repeatedly picks a **random feature** and a **random cut point** to split the data. A login that is very different from the others is separated after **few cuts** (a short path), while a typical login needs **many cuts**. Shorter average paths mean more anomalous.
 
-Settings used: 100 trees, `contamination = 0.05` (our guess that about 5% of rows are anomalous), and a fixed random seed. Rows with a `decision_function` score below 0 are labelled `Anomalous`.
+Settings used: 100 trees, `contamination = "auto"` (a threshold setting, not a prevalence estimate), and an explicit random seed for reproducibility. The robust evaluator also reports PR-AUC from continuous anomaly scores. Rows with a `decision_function` score below 0 are labelled `Anomalous`.
 
 The model does **not understand hacking**. It only finds numerically unusual patterns in the features it is given. That is why the number of anomalies is largely set by the `contamination` guess.
 
@@ -274,9 +277,12 @@ Run these from the project folder with the virtual environment active:
 python -m src.generate_dataset             # 1. create the synthetic logs
 python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
-python -m src.evaluate_model                # 4. evaluate chronological holdout windows
-python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
-python -m streamlit run dashboard/app.py   # 6. open the dashboard
+python -m src.evaluate_model                # 4. original chronological evaluation
+python -m src.robust_evaluation --seeds 20   # 5. multi-seed baseline / PR-AUC / scenario report
+python -m src.anomaly_detector --input data/new_events.csv  # score incoming events
+# Optional: add --history path/to/history.csv to override the default history
+python -m src.stress_test_evaluation        # 6. stress-test difficult synthetic edge cases
+python -m streamlit run dashboard/app.py   # 7. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
@@ -297,6 +303,9 @@ The dashboard is designed as a small SOC analyst workspace. It includes:
 Exact labels and counts can change with the dataset and pipeline output. The dashboard is a local prototype; it does not ingest live authentication events or send production alerts.
 
 ## Dashboard Screenshots
+
+Capture the running dashboard and save the four screenshots at these exact paths before presenting the project: `docs/images/dashboard-overview.jpg`, `docs/images/alert-queue.jpg`, `docs/images/severity-filter.jpg`, and `docs/images/alert-investigation.jpg`. If these files are absent from a checkout, the screenshot links will not render.
+
 
 The Streamlit dashboard provides a compact SOC-style workflow: review authentication trends, prioritize the alert queue, and inspect the context behind an individual event.
 
@@ -373,7 +382,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 
 | Limitation | Notes |
 |---|---|
-| Synthetic dataset | The planted attacks are easy to separate from normal data, so results look better than real-world results would. |
+| Synthetic dataset | The original dataset is too easy: `device == "Unknown Device"` alone achieves F1 = 1.0 on the current labels. This is label leakage by construction, not evidence of useful detection. |
 | Limited features | Only a handful of simple signals are used. Real systems use many more. |
 | Sequence windows | The 45-minute failure and 5-minute success windows are project-specific choices and need tuning against broader datasets. |
 | False positives | VPNs, travel, new phones, and late work can all look suspicious. |
@@ -428,6 +437,37 @@ Authentication logs -> Log collection -> Preprocessing / normalisation
 
 It is **much simpler** than a real SIEM such as Splunk. It does not collect live logs, has no alert workflow, and is **not** a complete SIEM.
 
+## MITRE ATT&CK Mapping
+
+This is a conceptual mapping of defensive detections to ATT&CK techniques, not a claim of complete technique coverage:
+
+| Detection | ATT&CK technique | Rationale and caveat |
+|---|---|---|
+| Repeated authentication failures, password guessing and slow brute force | [T1110 — Brute Force](https://attack.mitre.org/techniques/T1110/) | Failure patterns may be consistent with brute force; legitimate typos and shared egress can also trigger alerts. |
+| Successful login from a new context or after repeated failures | [T1078 — Valid Accounts](https://attack.mitre.org/techniques/T1078/) | Unusual successful authentication may warrant investigation; this detector cannot prove credential compromise. |
+
+Impossible travel and unusual device/location are behavioural analytics signals, not standalone proof of a specific ATT&CK technique.
+
+## What I Found
+
+The first synthetic dataset was too easy: the single field `device == "Unknown Device"` achieved F1 = 1.0 against its generated labels. That meant a trivial shortcut could appear perfect without learning meaningful authentication behaviour.
+
+I rebuilt the generator to mix legitimate VPN-like IP changes, travel, new devices, late-night work and typo bursts with attacks that can use familiar devices or normal-looking IPs. The new design adds 36 users, 60 days, and scenario IDs. **The rebuild is a hypothesis, not a result:** run `python -m src.robust_evaluation --seeds 20` and inspect the single-field baselines before claiming the shortcut has been eliminated. The results are not yet a public-data or production benchmark.
+
+## Public Dataset Validation
+
+A candidate for external exploration is the [LANL User-Computer Authentication Associations in Time dataset](https://csr.lanl.gov/data/auth/). The publisher describes anonymized successful user-to-computer authentication events over nine continuous months and states that copyright is waived to the extent possible under law. It contains successful events only, so it does **not** provide labelled attacks or failed-login sequences; it can test feature compatibility and scoring stability but cannot validate attack-detection metrics.
+
+After downloading a LANL `.bz2` data file, prepare a bounded sample (the script defaults to 100,000 rows):
+
+```powershell
+python -m src.prepare_lanl_sample --input path/to/lanl-auth-dataset-1-00.bz2 --rows 100000
+python -m src.anomaly_detector --input data/lanl_auth_sample_holdout.csv --history data/lanl_auth_sample_history.csv
+```
+
+The adapter does not invent IP addresses, coordinates, failed events, or labels. The timestamp origin is an arbitrary ordering anchor because the source publishes relative time offsets. **This external-data run remains unverified until you execute these commands locally**; no real-data results are claimed in this repository change.
+
+
 ## Disclaimer
 
 This is an educational cybersecurity project focused on **defensive security**: detection, monitoring, and analysis. It uses synthetic data only. It does not contain instructions for attacking real systems, stealing credentials, or bypassing authentication. Results must not be treated as proof of malicious activity, and the project is not suitable for production use.
@@ -444,12 +484,12 @@ This report compares each individual risk signal and the combined risk-score bas
 
 **Why this matters:** the dataset generator creates anomalies through specific scenarios (repeated failures, unusual-hour logins from unfamiliar locations/devices, and rapid-login bursts). Several of the detector rules target those same scenario characteristics. Strong rule performance on this dataset may therefore reflect how its labels were constructed, rather than independent evidence that the rules will generalise to real authentication logs.
 
-Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger future evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
+Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
 
 
 ## Controlled Edge-Case Stress Test
 
-Run a second, deliberately difficult evaluation separately from the original 1,588-row baseline:
+The following stress test is a legacy diagnostic against the original 1,588-row dataset; it does not evaluate the rebuilt generator. Run it separately:
 
 ```bash
 python -m src.stress_test_evaluation

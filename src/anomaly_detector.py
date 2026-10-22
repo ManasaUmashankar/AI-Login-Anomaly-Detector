@@ -10,16 +10,16 @@ from src.utils import MODEL_PATH
 
 # The columns the model is allowed to look at (all numbers)
 MODEL_FEATURES = [
-    "login_hour", "failed_attempts", "is_new_ip", "is_new_device",
+    "login_hour", "is_new_ip", "is_new_device", "failed_logins_6h", "impossible_travel",
     "is_unusual_hour", "is_unusual_location", "login_frequency", "location_change",
     "failed_logins_45m", "successful_logins_5m",
 ]
 
 # Model settings (project choices, not universal standards)
 N_TREES = 100
-CONTAMINATION = 0.05     # our guess: about 5% of rows are anomalous
+CONTAMINATION = "auto"  # avoid assuming a fixed anomaly prevalence
 RANDOM_STATE = 42        # makes the result the same every run
-FEATURE_VERSION = 3      # rolling-window features added to the model inputs
+FEATURE_VERSION = 4      # rolling-window features added to the model inputs
 
 # NEW (Stage 9)
 ML_REASON = "Statistically unusual pattern (ML)"
@@ -29,12 +29,12 @@ FINAL_COLUMNS = [
 ]
 
 
-def train_model(features_df):
+def train_model(features_df, seed=RANDOM_STATE, contamination=CONTAMINATION):
     """Teach the model what the data looks like (no labels used)."""
     model = IsolationForest(
         n_estimators=N_TREES,
-        contamination=CONTAMINATION,
-        random_state=RANDOM_STATE,
+        contamination=contamination,
+        random_state=seed,
     )
     model.fit(features_df[MODEL_FEATURES])
     return model
@@ -150,6 +150,20 @@ def print_rows(rows):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Train or score authentication logs.")
+    parser.add_argument("--input", help="CSV containing unseen events to score.")
+    parser.add_argument("--history", help="Optional CSV of historical events.")
+    args = parser.parse_args()
+    if args.input:
+        from src.score_events import score_events
+        incoming = pd.read_csv(args.input)
+        history = pd.read_csv(args.history) if args.history else load_logs()
+        history_features = build_features(preprocess_logs(history))
+        model = load_model() if model_is_current() else train_model(history_features)
+        scored = score_events(incoming, history, model)
+        print_rows(scored.sort_values("risk_score", ascending=False).head(30))
+        return
     result = run_pipeline(retrain=True)
     print(f"\nModel trained and saved to {MODEL_PATH}")
 
