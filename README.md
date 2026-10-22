@@ -124,35 +124,29 @@ data/login_logs.csv
 
 ## Dataset
 
-The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
+The primary dataset is synthetic and contains no real credentials or personal data. `src/generate_dataset.py` creates a reproducible dataset with 36 users over 60 days, benign VPN-like IP changes, new devices, travel, late-night work, typo bursts, and multiple attack scenarios. Each scenario has a `scenario_id`; latitude and longitude support impossible-travel experiments.
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users (the original, intentionally simple baseline; a more realistic generator is being developed on the improvement branch). The random seed is fixed, so the data is identical on every run.
+```powershell
+python -m src.generate_dataset --seed 42
+```
 
 | Column | Meaning |
 |---|---|
-| `timestamp` | Date and time of the login attempt |
-| `username` | Account used |
-| `ip_address` | Source IP address |
-| `location` | Approximate location of the IP |
-| `device` | Device type |
+| `timestamp`, `username` | Event time and account |
+| `ip_address`, `location`, `latitude`, `longitude` | Source network and coarse location context |
+| `device`, `user_agent` | Client context |
 | `login_status` | `success` or `failed` |
-| `failed_attempts` | Generator-provided count of failures in the current sequence (legacy field; not independent evidence) |
-| `user_agent` | Browser or program identifier |
-| `session_id` | Unique ID for the attempt |
+| `session_id` | Event identifier |
+| `true_label` | Synthetic evaluation label; never a model input |
+| `scenario_id` | Groups events belonging to a designed scenario |
 
-**Normal behaviour (1,500 records):** familiar IP, device, and location, working hours, mostly successful logins, with an occasional typo.
-
-**Suspicious behaviour planted (88 records):**
-
-- 5 brute-force-style runs (6 to 12 fast failures, 3 of them ending in a success)
-- 8 unusual logins (new IP, new device, foreign location, 1 to 4 AM)
-- 4 rapid-login bursts (6 logins in about a minute)
+Labels are synthetic assumptions, not independent ground truth. The generator is designed to reduce easy single-field shortcuts, but that must be verified by the evaluation report before claiming the baseline requirement is met.
 
 ## Detection Methodology
 
 1. **Preprocessing:** fix types, clean text, remove exact duplicates and unreadable rows. Unusual but valid rows are always kept.
 2. **Feature engineering:** turn raw fields into signals such as "is this IP different from the user's usual IP?".
-3. **Rules:** check each login against five explainable rules.
+3. **Rules:** check each login against explainable rules.
 4. **Risk scoring:** add up points for each signal to get a score and a level.
 5. **Machine learning:** Isolation Forest scores how unusual each login is.
 6. **Combination:** merge the risk level and the ML result into one final status.
@@ -168,6 +162,9 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | Rapid login attempts | 5 or more attempts by one user within 5 minutes |
 | Repeated failed logins within 45 minutes | 5 or more failed events in the trailing 45-minute window |
 | Rapid successful login burst | 5 or more successful events in the trailing 5-minute window |
+| Password spraying | Failures against 4 or more distinct accounts from one source IP within 15 minutes |
+| Slow brute force | 8 or more failures accumulated over 6 hours |
+| Impossible travel | Successful logins imply travel faster than 900 km/h between known coordinates |
 
 Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the most common IP, device, and location in earlier login history only. Events with the same timestamp share one baseline, and a user's first observed timestamp has no historical baseline yet.
 
@@ -184,6 +181,9 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | Unusual login hour | +1 |
 | Repeated failures within 45 minutes | +3 |
 | Rapid successful logins within 5 minutes | +3 |
+| Multiple accounts failed from one source within 15 minutes | +3 |
+| Repeated failures within six hours | +3 |
+| Impossible travel between successful logins | +3 |
 
 | Total score | Level |
 |---|---|
@@ -191,7 +191,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | 3 to 5 | Medium |
 | 6 and above | High |
 
-The highest possible score is 19. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
+The configured signal points sum to a theoretical maximum of 22 when all ten scoring signals fire. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
 
 > **These points and levels are project-specific design choices, not cybersecurity standards.** They exist to rank alerts. SOC analysts have limited time, and not every alert has the same severity, so scoring helps them look at the most serious events first.
 
@@ -199,7 +199,7 @@ The highest possible score is 19. The rolling-window signals overlap intentional
 
 The project uses **unsupervised learning**: the model is trained without labels, because in real environments labelled attacks are rare and attack patterns keep changing. The planted suspicious rows are used only afterwards to sanity-check results.
 
-The model sees ten numeric features: `login_hour`, `failed_attempts`, `is_new_ip`, `is_new_device`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. The last two expose recent failure and success bursts directly to the model, rather than leaving those patterns to the rule layer alone. They are project-specific rolling windows, not proof of malicious intent.
+The model uses numeric time, context, rolling-failure, rapid-success, slow-brute-force, and impossible-travel features. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The last two expose recent failure and success bursts directly to the model, rather than leaving those patterns to the rule layer alone. They are project-specific rolling windows, not proof of malicious intent.
 
 The trained model is saved with Joblib to `models/anomaly_model_v3.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
 
@@ -209,7 +209,7 @@ The trained model is saved with Joblib to `models/anomaly_model_v3.pkl`, so the 
 
 Isolation Forest builds many random decision trees. Each tree repeatedly picks a **random feature** and a **random cut point** to split the data. A login that is very different from the others is separated after **few cuts** (a short path), while a typical login needs **many cuts**. Shorter average paths mean more anomalous.
 
-Settings used: 100 trees, `contamination = 0.05` (our guess that about 5% of rows are anomalous), and a fixed random seed. Rows with a `decision_function` score below 0 are labelled `Anomalous`.
+Settings used: 100 trees, `contamination = "auto"` (a threshold setting, not a prevalence estimate), and an explicit random seed for reproducibility. The robust evaluator also reports PR-AUC from continuous anomaly scores. Rows with a `decision_function` score below 0 are labelled `Anomalous`.
 
 The model does **not understand hacking**. It only finds numerically unusual patterns in the features it is given. That is why the number of anomalies is largely set by the `contamination` guess.
 
