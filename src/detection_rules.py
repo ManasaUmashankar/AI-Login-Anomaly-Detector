@@ -120,6 +120,9 @@ RISK_SIGNALS = [
 def apply_rules(df):
     """Run detection rules and explain every signal that contributes risk."""
     df = df.copy()
+    for column, default in (("failed_logins_6h", 0), ("impossible_travel", 0), ("travel_speed_kmh", 0.0)):
+        if column not in df.columns:
+            df[column] = default
     df["rules_triggered"] = 0
     df["detection_reasons"] = ""
 
@@ -156,6 +159,9 @@ def risk_level_for(score):
 def apply_risk_scores(df):
     """Add 'risk_score' (points added up) and 'risk_level' (Low/Medium/High)."""
     df = df.copy()
+    for column, default in (("failed_logins_6h", 0), ("impossible_travel", 0), ("travel_speed_kmh", 0.0)):
+        if column not in df.columns:
+            df[column] = default
     df["risk_score"] = 0
 
     for name, points, signal_function in RISK_SIGNALS:
