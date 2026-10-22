@@ -20,7 +20,7 @@ def make_history():
         for username, ip, location, device in profiles:
             rows.append([
                 f"2026-09-{day:02d} 10:00:00", username, ip, location, device,
-                "success", 0, "test-agent", f"{username}-{day}",
+                "success", "test-agent", f"{username}-{day}",
             ])
     frame = pd.DataFrame(rows, columns=REQUIRED_COLUMNS)
     frame["timestamp"] = pd.to_datetime(frame["timestamp"])
