@@ -1,6 +1,9 @@
 # AI Login Anomaly Detector
 
-An educational **Blue Team** project that analyses synthetic login logs and flags *potentially suspicious* authentication behaviour using explainable rules, risk scoring, and machine learning (Isolation Forest).
+A defensive Blue Team prototype for triaging authentication events.
+It combines explainable detection rules, risk scoring, and Isolation Forest.
+The Streamlit dashboard helps an analyst inspect why an event was flagged.
+Evaluation uses synthetic scenarios; results are diagnostic, not production evidence.
 
 > **Important:** an anomaly is a signal to investigate, not proof of an attack. This project uses synthetic data only and is not a production security tool.
 
@@ -123,7 +126,7 @@ data/login_logs.csv
 
 The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users. The random seed is fixed, so the data is identical on every run.
+`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users (the original, intentionally simple baseline; a more realistic generator is being developed on the improvement branch). The random seed is fixed, so the data is identical on every run.
 
 | Column | Meaning |
 |---|---|
@@ -133,7 +136,7 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | `location` | Approximate location of the IP |
 | `device` | Device type |
 | `login_status` | `success` or `failed` |
-| `failed_attempts` | Number of failures in the current sequence |
+| `failed_attempts` | Generator-provided count of failures in the current sequence (legacy field; not independent evidence) |
 | `user_agent` | Browser or program identifier |
 | `session_id` | Unique ID for the attempt |
 
@@ -298,6 +301,9 @@ Exact labels and counts can change with the dataset and pipeline output. The das
 
 ## Dashboard Screenshots
 
+Capture the running dashboard and save the four screenshots at these exact paths before presenting the project: `docs/images/dashboard-overview.jpg`, `docs/images/alert-queue.jpg`, `docs/images/severity-filter.jpg`, and `docs/images/alert-investigation.jpg`. If these files are absent from a checkout, the screenshot links will not render.
+
+
 The Streamlit dashboard provides a compact SOC-style workflow: review authentication trends, prioritize the alert queue, and inspect the context behind an individual event.
 
 ### Security overview
@@ -373,7 +379,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 
 | Limitation | Notes |
 |---|---|
-| Synthetic dataset | The planted attacks are easy to separate from normal data, so results look better than real-world results would. |
+| Synthetic dataset | The original dataset is too easy: `device == "Unknown Device"` alone achieves F1 = 1.0 on the current labels. This is label leakage by construction, not evidence of useful detection. |
 | Limited features | Only a handful of simple signals are used. Real systems use many more. |
 | Sequence windows | The 45-minute failure and 5-minute success windows are project-specific choices and need tuning against broader datasets. |
 | False positives | VPNs, travel, new phones, and late work can all look suspicious. |
@@ -444,7 +450,7 @@ This report compares each individual risk signal and the combined risk-score bas
 
 **Why this matters:** the dataset generator creates anomalies through specific scenarios (repeated failures, unusual-hour logins from unfamiliar locations/devices, and rapid-login bursts). Several of the detector rules target those same scenario characteristics. Strong rule performance on this dataset may therefore reflect how its labels were constructed, rather than independent evidence that the rules will generalise to real authentication logs.
 
-Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger future evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
+Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
 
 
 ## Controlled Edge-Case Stress Test
