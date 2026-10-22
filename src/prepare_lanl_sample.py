@@ -24,9 +24,16 @@ def prepare(input_path, output_path, rows=100000):
         "latitude": float("nan"), "longitude": float("nan"), "scenario_id": "",
     })
     output_path = Path(output_path); output_path.parent.mkdir(parents=True, exist_ok=True)
+    split = max(1, int(len(out) * 0.7))
+    history_path = output_path.with_name(output_path.stem + "_history.csv")
+    holdout_path = output_path.with_name(output_path.stem + "_holdout.csv")
+    out.iloc[:split].to_csv(history_path, index=False)
+    out.iloc[split:].to_csv(holdout_path, index=False)
     out.to_csv(output_path, index=False)
     print(f"Prepared {len(out)} unlabeled successful authentication events: {output_path}")
-    print("This sample supports exploratory anomaly scoring only; it cannot validate attack detection metrics.")
+    print(f"Chronological history: {history_path} ({split} rows)")
+    print(f"Chronological holdout: {holdout_path} ({len(out) - split} rows)")
+    print("This supports exploratory anomaly scoring only; the dataset has no attack labels and cannot validate attack-detection metrics.")
 
 def main():
     parser = argparse.ArgumentParser()
