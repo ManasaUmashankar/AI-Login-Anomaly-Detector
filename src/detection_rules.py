@@ -9,6 +9,7 @@ RAPID_LOGIN_THRESHOLD = 5
 FAILED_LOGIN_WINDOW_THRESHOLD = 5
 RAPID_SUCCESS_WINDOW_THRESHOLD = 5
 FAILED_USERS_PER_SOURCE_THRESHOLD = 4
+SLOW_BRUTE_FORCE_THRESHOLD = 8
 
 # NEW (Stage 7): risk levels (also project-specific)
 LOW_MAX_SCORE = 2        # 0 to 2 = Low
@@ -57,6 +58,16 @@ def rule_password_spray_source(df):
     return df["distinct_failed_users_per_ip_15m"] >= FAILED_USERS_PER_SOURCE_THRESHOLD
 
 
+def rule_slow_brute_force(df):
+    """Flag repeated failures accumulated over a six-hour window."""
+    return df["failed_logins_6h"] >= SLOW_BRUTE_FORCE_THRESHOLD
+
+
+def rule_impossible_travel(df):
+    """Flag a successful login requiring more than 900 km/h travel."""
+    return (df["login_status"] == "success") & (df["impossible_travel"] == 1)
+
+
 # Each rule = (reason text, function that checks it)
 RULES = [
     ("Multiple failed login attempts", rule_multiple_failures),
@@ -67,6 +78,8 @@ RULES = [
     ("Repeated failed logins within 45 minutes", rule_repeated_failures_in_window),
     ("Rapid successful login burst", rule_rapid_successes),
     ("Failed logins against multiple accounts from one source", rule_password_spray_source),
+    ("Slow brute-force pattern within six hours", rule_slow_brute_force),
+    ("Impossible travel between successful logins", rule_impossible_travel),
 ]
 
 
@@ -99,6 +112,8 @@ RISK_SIGNALS = [
     ("Repeated failures within 45 minutes", 3, rule_repeated_failures_in_window),
     ("Rapid successful logins within 5 minutes", 3, rule_rapid_successes),
     ("Multiple accounts failed from one source within 15 minutes", 3, rule_password_spray_source),
+    ("Repeated failures within six hours", 3, rule_slow_brute_force),
+    ("Impossible travel between successful logins", 3, rule_impossible_travel),
 ]
 
 
