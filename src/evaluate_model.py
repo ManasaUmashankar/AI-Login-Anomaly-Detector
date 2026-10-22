@@ -81,7 +81,7 @@ def _choose_temporal_train_group(features, train_fraction, minimum_future_groups
     return min(candidates, key=lambda group_index: abs(group_starts[group_index] - target_rows))
 
 
-def evaluate_temporal_holdout(df, train_fraction=0.70):
+def evaluate_temporal_holdout(df, train_fraction=0.70, seed=42):
     """Train on earlier logins and evaluate only on later, unseen logins."""
     if "true_label" not in df.columns:
         raise ValueError("Dataset must contain a true_label column for evaluation.")
@@ -109,7 +109,7 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
     test_features = features.iloc[split_at:]
 
     # Train only on the earlier period; never fit the model on holdout rows.
-    model = train_model(train_features)
+    model = train_model(train_features, seed=seed)
     predictions = apply_model(model, test_features)
 
     y_true = normalize_labels(test_features["true_label"])
@@ -133,7 +133,7 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
 
 
 
-def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
+def evaluate_temporal_windows(df, train_fraction=0.40, windows=4, seed=42):
     """Evaluate consecutive future windows with an expanding training history."""
     if not isinstance(windows, int) or windows < 2:
         raise ValueError("windows must be an integer of at least 2.")
