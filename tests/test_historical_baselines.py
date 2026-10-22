@@ -18,7 +18,6 @@ def make_row(timestamp, place=USUAL, username="alice"):
         location,
         device,
         "success",
-        0,
         "test-agent",
         f"{username}-{timestamp}",
     ]
