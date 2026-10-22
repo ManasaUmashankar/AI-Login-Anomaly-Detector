@@ -55,8 +55,11 @@ def add_difference_from_usual(df, column, new_name):
                     batch[column] != usual_value
                 ).astype("int64")
 
-            # Only make this timestamp available to later events.
-            for value in batch[column].tolist():
+            # Trusted baselines learn from successful historical logins only.
+            trusted = batch[batch["login_status"] == "success"]
+            if "_incoming_event" in trusted.columns:
+                trusted = trusted[~trusted["_incoming_event"].fillna(False)]
+            for value in trusted[column].tolist():
                 history[value] = history.get(value, 0) + 1
 
     df[new_name] = flags
