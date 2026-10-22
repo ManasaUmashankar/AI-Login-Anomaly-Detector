@@ -279,7 +279,8 @@ python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
 python -m src.evaluate_model                # 4. original chronological evaluation
 python -m src.robust_evaluation --seeds 20   # 5. multi-seed baseline / PR-AUC / scenario report
-python -m src.score_events --input data/new_events.csv  # score incoming events
+python -m src.anomaly_detector --input data/new_events.csv  # score incoming events
+# Optional: add --history path/to/history.csv to override the default history
 python -m src.stress_test_evaluation        # 6. stress-test difficult synthetic edge cases
 python -m streamlit run dashboard/app.py   # 7. open the dashboard
 ```
