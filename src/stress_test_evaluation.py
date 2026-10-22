@@ -14,7 +14,7 @@ from src.read_dataset import load_logs
 
 STRESS_COLUMNS = [
     "timestamp", "username", "ip_address", "location", "device",
-    "login_status", "failed_attempts", "user_agent", "session_id", "true_label",
+    "login_status", "user_agent", "session_id", "latitude", "longitude", "true_label", "scenario_id",
 ]
 
 
@@ -34,7 +34,7 @@ def _user_profiles(history):
 def build_stress_scenarios(history):
     """Build benign edge cases and suspicious sequences after historical data."""
     required = {"timestamp", "username", "ip_address", "location", "device",
-                "login_status", "failed_attempts", "user_agent", "session_id"}
+                "login_status", "user_agent", "session_id"}
     missing = sorted(required - set(history.columns))
     if missing:
         raise ValueError(f"Historical data is missing required columns: {missing}")
@@ -64,7 +64,8 @@ def build_stress_scenarios(history):
             "location": location or profile["location"],
             "device": actual_device,
             "login_status": status,
-            "failed_attempts": failures,
+            "latitude": {"Bengaluru, India": 12.9716, "Mumbai, India": 19.0760, "Pune, India": 18.5204, "Jaipur, India": 26.9124}.get(location or profile["location"]),
+            "longitude": {"Bengaluru, India": 77.5946, "Mumbai, India": 72.8777, "Pune, India": 73.8567, "Jaipur, India": 75.7873}.get(location or profile["location"]),
             "user_agent": {
                 "Windows Laptop": "Chrome on Windows",
                 "MacBook": "Safari on Mac",
@@ -73,6 +74,7 @@ def build_stress_scenarios(history):
             }.get(actual_device, "Synthetic stress-test agent"),
             "session_id": f"stress-{counter:04d}",
             "true_label": label,
+            "scenario_id": scenario,
             "scenario": scenario,
         })
 
