@@ -131,14 +131,31 @@ def apply_rules(df):
         df["rules_triggered"] += hit.astype(int)
         df.loc[hit, "detection_reasons"] += reason + "; "
 
-    # Risk signals are not all full detection rules (for example, a new IP
-    # alone adds points). Explain these too, so a Medium score never lacks
-    # context simply because no combined rule fired.
+    # Add explanations for risk-only signals without duplicating an existing
+    # rule explanation for the same underlying condition.
+    equivalent_reasons = {
+        "Multiple failed login attempts": {"Repeated failures within 45 minutes"},
+        "Repeated failed logins within 45 minutes": {"Repeated failures within 45 minutes"},
+        "Rapid successful login burst": {"Rapid successful logins within 5 minutes"},
+        "Rapid successful logins within 5 minutes": {"Rapid successful login burst"},
+        "Failed logins against multiple accounts from one source": {
+            "Multiple accounts failed from one source within 15 minutes"
+        },
+        "Multiple accounts failed from one source within 15 minutes": {
+            "Failed logins against multiple accounts from one source"
+        },
+        "Slow brute-force pattern within six hours": {"Repeated failures within six hours"},
+        "Repeated failures within six hours": {"Slow brute-force pattern within six hours"},
+    }
     for reason, _points, signal_function in RISK_SIGNALS:
         hit = signal_function(df).fillna(False).astype(bool)
         already_explained = df["detection_reasons"].str.contains(
             reason, regex=False, na=False
         )
+        for equivalent in equivalent_reasons.get(reason, set()):
+            already_explained |= df["detection_reasons"].str.contains(
+                equivalent, regex=False, na=False
+            )
         df.loc[hit & ~already_explained, "detection_reasons"] += reason + "; "
 
     df["detection_reasons"] = df["detection_reasons"].str.rstrip("; ")
