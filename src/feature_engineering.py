@@ -9,6 +9,7 @@ FAILED_LOGIN_WINDOW_MINUTES = 45
 SLOW_BRUTE_FORCE_WINDOW_HOURS = 6
 SUCCESS_LOGIN_WINDOW_MINUTES = 5
 FAILED_SOURCE_USER_WINDOW_MINUTES = 15
+MINIMUM_SUCCESS_HISTORY = 3
 
 FLAG_COLUMNS = ["is_unusual_hour", "is_new_ip", "is_new_device", "is_unusual_location", "location_change", "impossible_travel"]
 NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + ["login_frequency", "failed_logins_45m", "failed_logins_6h", "successful_logins_5m", "distinct_failed_users_per_ip_15m", "travel_speed_kmh"]
@@ -124,9 +125,9 @@ def build_features(df):
     for column in ("latitude", "longitude", "scenario_id"):
         if column not in df.columns: df[column] = float("nan") if column != "scenario_id" else ""
     df = add_time_features(df)
-    df = add_difference_from_usual(df, "ip_address", "is_new_ip", min_history=1)
-    df = add_difference_from_usual(df, "device", "is_new_device", min_history=1)
-    df = add_difference_from_usual(df, "location", "is_unusual_location", min_history=1)
+    df = add_difference_from_usual(df, "ip_address", "is_new_ip", min_history=MINIMUM_SUCCESS_HISTORY)
+    df = add_difference_from_usual(df, "device", "is_new_device", min_history=MINIMUM_SUCCESS_HISTORY)
+    df = add_difference_from_usual(df, "location", "is_unusual_location", min_history=MINIMUM_SUCCESS_HISTORY)
     df = add_location_change(df)
     df = add_login_frequency(df)
     df = add_login_status_windows(df)
