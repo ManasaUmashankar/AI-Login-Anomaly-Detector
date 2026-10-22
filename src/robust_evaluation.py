@@ -54,14 +54,18 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
             m = _metrics(y, pred)
             row = {"seed": seed, "window": w + 1, "method": method, **m, "pr_auc": float(average_precision_score(y, score)) if method == "ml_only" else np.nan}
             out.append(row)
-        # Scenario-level outcomes: one detection anywhere in a scenario counts as detected.
+        # Keep attack and benign scenarios; exclude ambiguous labels rather than guessing.
         if "scenario_id" in test:
             for method, pred in methods.items():
-                temp = test[["scenario_id", "timestamp", "true_label"]].copy(); temp["pred"] = np.asarray(pred)
-                scenarios = temp[(temp["scenario_id"].fillna("") != "") & (temp["true_label"] == "anomaly")]
-                for sid, grp in scenarios.groupby("scenario_id"):
-                    hit = grp[grp["pred"] == 1]
-                    out.append({"seed": seed, "window": w + 1, "method": method, "metric_type": "scenario", "scenario_id": sid, "scenario_detected": int(not hit.empty), "time_to_detect_seconds": float((hit["timestamp"].min() - grp["timestamp"].min()).total_seconds()) if not hit.empty else np.nan})
+                temp = test[["scenario_id", "timestamp", "true_label"]].copy()
+                temp["pred"] = np.asarray(pred)
+                temp = temp[(temp["scenario_id"].fillna("") != "") & temp["true_label"].isin(["normal", "anomaly"])]
+                for sid, grp in temp.groupby("scenario_id"):
+                    attack = grp[grp["true_label"] == "anomaly"]
+                    benign = grp[grp["true_label"] == "normal"]
+                    hit = attack[attack["pred"] == 1]
+                    false_alert = benign[benign["pred"] == 1]
+                    out.append({"seed": seed, "window": w + 1, "method": method, "metric_type": "scenario", "scenario_id": sid, "scenario_label": "attack" if not attack.empty else "benign", "scenario_detected": int(not hit.empty) if not attack.empty else np.nan, "scenario_false_positive": int(not false_alert.empty) if attack.empty else np.nan, "time_to_detect_seconds": float((hit["timestamp"].min() - attack["timestamp"].min()).total_seconds()) if not hit.empty else np.nan})
     return pd.DataFrame(out)
 
 def main():
