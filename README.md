@@ -201,7 +201,7 @@ The project uses **unsupervised learning**: the model is trained without labels,
 
 The model uses numeric time, context, rolling-failure, rapid-success, slow-brute-force, and impossible-travel features. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The last two expose recent failure and success bursts directly to the model, rather than leaving those patterns to the rule layer alone. They are project-specific rolling windows, not proof of malicious intent.
 
-The trained model is saved with Joblib to `models/anomaly_model_v3.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
+The trained model is saved with Joblib to `models/anomaly_model_v4.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
 
 > `.pkl` (pickle) files can run code when loaded. Only load model files from sources you trust.
 
