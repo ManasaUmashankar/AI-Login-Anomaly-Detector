@@ -29,12 +29,12 @@ FINAL_COLUMNS = [
 ]
 
 
-def train_model(features_df):
+def train_model(features_df, seed=RANDOM_STATE):
     """Teach the model what the data looks like (no labels used)."""
     model = IsolationForest(
         n_estimators=N_TREES,
         contamination=CONTAMINATION,
-        random_state=RANDOM_STATE,
+        random_state=seed,
     )
     model.fit(features_df[MODEL_FEATURES])
     return model
