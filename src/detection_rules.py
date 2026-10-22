@@ -17,13 +17,13 @@ MEDIUM_MAX_SCORE = 5     # 3 to 5 = Medium, 6 and above = High
 
 def rule_multiple_failures(df):
     """Rule 1: many failed attempts in a row."""
-    return df["failed_attempts"] >= FAILED_ATTEMPTS_THRESHOLD
+    return df["failed_logins_45m"] >= FAILED_ATTEMPTS_THRESHOLD
 
 
 def rule_success_after_failures(df):
     """Rule 2: a successful login that came after repeated failures."""
     is_success = df["login_status"] == "success"
-    had_failures = df["failed_attempts"] >= FAILURES_BEFORE_SUCCESS_THRESHOLD
+    had_failures = df["failed_logins_45m"] >= FAILURES_BEFORE_SUCCESS_THRESHOLD
     return is_success & had_failures
 
 
