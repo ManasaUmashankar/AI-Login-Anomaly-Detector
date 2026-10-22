@@ -277,9 +277,11 @@ Run these from the project folder with the virtual environment active:
 python -m src.generate_dataset             # 1. create the synthetic logs
 python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
-python -m src.evaluate_model                # 4. evaluate chronological holdout windows
-python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
-python -m streamlit run dashboard/app.py   # 6. open the dashboard
+python -m src.evaluate_model                # 4. original chronological evaluation
+python -m src.robust_evaluation --seeds 20   # 5. multi-seed baseline / PR-AUC / scenario report
+python -m src.score_events --input data/new_events.csv  # score incoming events
+python -m src.stress_test_evaluation        # 6. stress-test difficult synthetic edge cases
+python -m streamlit run dashboard/app.py   # 7. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
