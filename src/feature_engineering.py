@@ -129,12 +129,17 @@ def add_login_status_windows(df):
 
     for _, user_group in ordered.groupby("username", sort=False):
         prior_failed = []
+        prior_failed_slow = []
         prior_success = []
         for _, batch in user_group.groupby("timestamp", sort=True):
             current = batch["timestamp"].iloc[0]
             prior_failed = [
                 timestamp for timestamp in prior_failed
                 if current - timestamp <= failed_window
+            ]
+            prior_failed_slow = [
+                timestamp for timestamp in prior_failed_slow
+                if current - timestamp <= slow_window
             ]
             prior_success = [
                 timestamp for timestamp in prior_success
@@ -143,11 +148,14 @@ def add_login_status_windows(df):
             batch_failed = batch.loc[batch["login_status"] == "failed", "timestamp"].tolist()
             batch_success = batch.loc[batch["login_status"] == "success", "timestamp"].tolist()
             failed_counts.loc[batch.index] = len(prior_failed) + len(batch_failed)
+            slow_failed_counts.loc[batch.index] = len(prior_failed_slow) + len(batch_failed)
             success_counts.loc[batch.index] = len(prior_success) + len(batch_success)
             prior_failed.extend(batch_failed)
+            prior_failed_slow.extend(batch_failed)
             prior_success.extend(batch_success)
 
     df["failed_logins_45m"] = failed_counts
+    df["failed_logins_6h"] = slow_failed_counts
     df["successful_logins_5m"] = success_counts
     return df
 
@@ -191,6 +199,40 @@ def add_failed_users_per_ip_window(df):
     return df
 
 
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    """Calculate great-circle distance between two coordinate pairs."""
+    from math import asin, cos, radians, sin, sqrt
+    radius = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return 2 * radius * asin(sqrt(min(1.0, max(0.0, a))))
+
+
+def add_impossible_travel(df, threshold_kmh=900.0):
+    """Flag a successful login requiring implausible travel since prior success."""
+    flags = pd.Series(0, index=df.index, dtype="int64")
+    speeds = pd.Series(0.0, index=df.index, dtype="float64")
+    ordered = df.sort_values(["username", "timestamp"], kind="stable")
+    for _, group in ordered.groupby("username", sort=False):
+        previous = None
+        for _, batch in group.groupby("timestamp", sort=True):
+            for idx, row in batch[batch["login_status"] == "success"].iterrows():
+                if previous is not None:
+                    elapsed = (row["timestamp"] - previous["timestamp"]).total_seconds() / 3600
+                    coords = [previous.get("latitude"), previous.get("longitude"), row.get("latitude"), row.get("longitude")]
+                    if elapsed > 0 and all(pd.notna(v) for v in coords):
+                        distance = _haversine_km(float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3]))
+                        speed = distance / elapsed
+                        speeds.loc[idx] = speed
+                        flags.loc[idx] = int(speed > threshold_kmh)
+                previous = row
+    df["travel_speed_kmh"] = speeds
+    df["impossible_travel"] = flags
+    return df
+
+
 def build_features(df):
     """Add all model features using strictly historical, timestamp-safe baselines."""
     df = df.copy()
@@ -203,6 +245,7 @@ def build_features(df):
     df = add_login_frequency(df)
     df = add_login_status_windows(df)
     df = add_failed_users_per_ip_window(df)
+    df = add_impossible_travel(df)
     return df
 
 def main():
