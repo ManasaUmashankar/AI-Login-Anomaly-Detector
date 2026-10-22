@@ -150,6 +150,20 @@ def print_rows(rows):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Train or score authentication logs.")
+    parser.add_argument("--input", help="CSV containing unseen events to score.")
+    parser.add_argument("--history", help="Optional CSV of historical events.")
+    args = parser.parse_args()
+    if args.input:
+        from src.score_events import score_events
+        incoming = pd.read_csv(args.input)
+        history = pd.read_csv(args.history) if args.history else load_logs()
+        history_features = build_features(preprocess_logs(history))
+        model = load_model() if model_is_current() else train_model(history_features)
+        scored = score_events(incoming, history, model)
+        print_rows(scored.sort_values("risk_score", ascending=False).head(30))
+        return
     result = run_pipeline(retrain=True)
     print(f"\nModel trained and saved to {MODEL_PATH}")
 
