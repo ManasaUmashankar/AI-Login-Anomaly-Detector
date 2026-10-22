@@ -201,7 +201,7 @@ The project uses **unsupervised learning**: the model is trained without labels,
 
 The model uses eleven numeric features: `login_hour`, `is_new_ip`, `is_new_device`, `failed_logins_6h`, `impossible_travel`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The rolling windows and travel estimate are project-specific signals, not proof of malicious intent.
 
-The trained model is saved to the path configured in `src/utils.py` (currently `models/anomaly_model.pkl`). The Joblib artifact records both a feature-version marker and the ordered feature-name list. If the artifact is missing, unreadable, or has an outdated schema, the pipeline retrains it before scoring.
+The trained model is saved to the path configured in `src/utils.py` (currently `models/anomaly_model_v4.pkl`). The Joblib artifact records both a feature-version marker and the ordered feature-name list. If the artifact is missing, unreadable, or has an outdated schema, the pipeline retrains it before scoring.
 
 > `.pkl` (pickle) files can run code when loaded. Only load model files from sources you trust.
 
@@ -247,7 +247,7 @@ AI-Login-Anomaly-Detector/
 │   ├── prepare_lanl_sample.py     # optional public-data adapter
 │   └── utils.py                   # shared file paths
 ├── models/
-│   └── anomaly_model.pkl
+│   └── anomaly_model_v4.pkl
 ├── dashboard/
 │   └── app.py
 ├── notebooks/                     # exploration notebooks
