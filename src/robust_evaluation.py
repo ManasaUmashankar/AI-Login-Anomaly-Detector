@@ -83,6 +83,13 @@ def main():
     summary.to_csv(output.with_name(output.stem + "-summary.csv"))
     print(summary.to_string()); print(f"\nFull per-seed results: {output}")
     scenarios = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)) == "scenario"]
-    if not scenarios.empty: print("\nScenario detection rate / time-to-detect:"); print(scenarios.groupby("method").agg(detection_rate=("scenario_detected", "mean"), mean_time_to_detect_seconds=("time_to_detect_seconds", "mean")).round(3).to_string())
-
+    if not scenarios.empty:
+        attacks = scenarios[scenarios["scenario_label"] == "attack"]
+        benign = scenarios[scenarios["scenario_label"] == "benign"]
+        print("\nScenario-level attack detection rate / time-to-detect:")
+        if not attacks.empty:
+            print(attacks.groupby("method").agg(detection_rate=("scenario_detected", "mean"), mean_time_to_detect_seconds=("time_to_detect_seconds", "mean")).round(3).to_string())
+        print("\nBenign scenario false-positive rate:")
+        if not benign.empty:
+            print(benign.groupby("method")["scenario_false_positive"].mean().round(3).to_string())
 if __name__ == "__main__": main()
