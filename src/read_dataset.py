@@ -13,9 +13,11 @@ REQUIRED_COLUMNS = [
     "location",
     "device",
     "login_status",
-    "failed_attempts",
     "user_agent",
     "session_id",
+    "latitude",
+    "longitude",
+    "scenario_id",
 ]
 
 
@@ -66,7 +68,7 @@ def explore(df):
     print(
         df.loc[
             df["failed_attempts"] >= 5,
-            ["timestamp", "username", "ip_address", "failed_attempts"],
+            ["timestamp", "username", "ip_address"],
         ]
     )
 
