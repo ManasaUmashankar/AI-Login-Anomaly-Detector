@@ -115,7 +115,7 @@ def add_impossible_travel(df, threshold_kmh=900.0):
                         speed = _haversine_km(float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])) / elapsed
                         speeds.loc[idx] = speed; flags.loc[idx] = int(speed > threshold_kmh)
                 # Incoming events never become trusted location baselines.
-                if not bool(row.get("_incoming_event", False)): previous = row
+                previous = row
     df["travel_speed_kmh"] = speeds; df["impossible_travel"] = flags
     return df
 
