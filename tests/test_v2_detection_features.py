@@ -22,10 +22,10 @@ def test_six_hour_window_catches_slow_failures():
 
 def test_failed_login_does_not_poison_usual_ip_baseline():
     df = pd.DataFrame({
-        "timestamp": pd.to_datetime(["2026-01-01 09:00:00", "2026-01-01 10:00:00", "2026-01-01 11:00:00"]),
-        "username": ["alice"] * 3, "ip_address": ["10.0.0.1", "10.0.0.9", "10.0.0.9"],
-        "login_status": ["success", "failed", "success"],
+        "timestamp": pd.to_datetime(["2026-01-01 09:00:00", "2026-01-01 10:00:00", "2026-01-01 11:00:00", "2026-01-01 12:00:00", "2026-01-01 13:00:00"]),
+        "username": ["alice"] * 5, "ip_address": ["10.0.0.1", "10.0.0.1", "10.0.0.1", "10.0.0.9", "10.0.0.9"],
+        "login_status": ["success", "success", "success", "failed", "success"],
     })
-    result = add_difference_from_usual(df, "ip_address", "is_new_ip")
-    assert result.loc[1, "is_new_ip"] == 1
-    assert result.loc[2, "is_new_ip"] == 1
+    result = add_difference_from_usual(df, "ip_address", "is_new_ip", min_history=3)
+    assert result.loc[3, "is_new_ip"] == 1
+    assert result.loc[4, "is_new_ip"] == 1
