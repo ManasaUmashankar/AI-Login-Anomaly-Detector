@@ -6,7 +6,7 @@ from src.read_dataset import load_logs
 
 REQUIRED_COLUMNS = [
     "timestamp", "username", "ip_address", "location", "device",
-    "login_status", "failed_attempts", "user_agent", "session_id",
+    "login_status", "user_agent", "session_id",
 ]
 
 # Optional column used only to evaluate the synthetic dataset.
@@ -73,10 +73,9 @@ def remove_duplicates(df):
 
 
 def validate_values(df):
-    """Remove invalid login statuses and negative failure counts."""
+    """Remove invalid login statuses."""
     valid = (
         df["login_status"].isin(VALID_STATUSES)
-        & (df["failed_attempts"] >= 0)
     )
 
     removed = int((~valid).sum())
@@ -86,13 +85,15 @@ def validate_values(df):
 def preprocess_logs(df):
     """Clean login logs and preserve optional ground-truth labels."""
     df = df.copy()
+    for column in ("latitude", "longitude", "scenario_id"):
+        if column not in df.columns:
+            df[column] = float("nan") if column != "scenario_id" else ""
     check_required_columns(df)
 
     rows_at_start = len(df)
     missing_found = int(df.isna().sum().sum())
 
     df = clean_text_columns(df)
-    df = fix_failed_attempts(df)
     df, bad_timestamps = fix_timestamps(df)
     df, duplicates = remove_duplicates(df)
     df, bad_values = validate_values(df)
