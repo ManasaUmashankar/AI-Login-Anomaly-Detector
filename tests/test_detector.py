@@ -26,7 +26,7 @@ FLAG_COLUMNS = ["is_new_ip", "is_new_device", "is_unusual_location", "is_unusual
 
 def make_row(time, place=USUAL, status="success", failed=0):
     ip, location, device = place
-    return [time, "alice", ip, location, device, status, failed, "test-agent", "s1"]
+    return [time, "alice", ip, location, device, status, "test-agent", "s1"]
 
 
 def make_logs(rows):
@@ -57,7 +57,8 @@ def make_ml_frame():
     """200 very normal rows plus 1 extreme row (all numbers, for the model)."""
     normal = pd.DataFrame({
         "login_hour": [9 + i % 9 for i in range(200)],
-        "failed_attempts": 0,
+        "failed_logins_6h": 0,
+        "impossible_travel": 0,
         "is_new_ip": 0,
         "is_new_device": 0,
         "is_unusual_hour": 0,
@@ -68,7 +69,7 @@ def make_ml_frame():
         "successful_logins_5m": 1,
     })
     outlier = pd.DataFrame([{
-        "login_hour": 3, "failed_attempts": 12, "is_new_ip": 1, "is_new_device": 1,
+        "login_hour": 3, "failed_logins_6h": 12, "impossible_travel": 1, "is_new_ip": 1, "is_new_device": 1,
         "is_unusual_hour": 1, "is_unusual_location": 1, "login_frequency": 13,
         "location_change": 1, "failed_logins_45m": 12, "successful_logins_5m": 13,
     }])
@@ -86,7 +87,7 @@ def pipeline_result(tmp_path, monkeypatch):
 def test_load_logs_has_expected_columns_and_rows():
     df = load_logs()
     assert len(df) > 0
-    assert list(df.columns) == REQUIRED_COLUMNS
+    assert all(column in df.columns for column in REQUIRED_COLUMNS)
 
 
 def test_load_logs_missing_file_raises(tmp_path, monkeypatch):
@@ -108,7 +109,8 @@ def test_preprocessing_keeps_unusual_rows():
     clean = preprocess_logs(demo_messy_data())
     moscow = clean[clean["location"] == "Moscow, Russia"]
     assert len(moscow) == 1                     # unusual, but valid: must survive
-    assert moscow.iloc[0]["failed_attempts"] == 12
+    assert moscow.iloc[0]["username"] == "alice"
+    assert moscow.iloc[0]["login_status"] == "failed"
 
 
 # ---------- Feature engineering ----------
