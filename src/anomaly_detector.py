@@ -29,21 +29,44 @@ FINAL_COLUMNS = [
 ]
 
 
+def _numeric_model_inputs(features_df):
+    """Validate the model schema and coerce features to numeric values."""
+    missing = [column for column in MODEL_FEATURES if column not in features_df.columns]
+    if missing:
+        raise ValueError(
+            "Missing required model features: " + ", ".join(missing)
+            + ". Build features with src.feature_engineering.build_features first."
+        )
+    inputs = features_df.loc[:, MODEL_FEATURES].copy()
+    for column in MODEL_FEATURES:
+        inputs[column] = pd.to_numeric(inputs[column], errors="coerce")
+    if inputs.isna().any().any():
+        bad = inputs.columns[inputs.isna().any()].tolist()
+        raise ValueError("Model features contain missing or non-numeric values: " + ", ".join(bad))
+    return inputs.astype("float64")
+
+
 def train_model(features_df, seed=RANDOM_STATE, contamination=CONTAMINATION):
     """Teach the model what the data looks like (no labels used)."""
+    inputs = _numeric_model_inputs(features_df)
     model = IsolationForest(
         n_estimators=N_TREES,
         contamination=contamination,
         random_state=seed,
     )
-    model.fit(features_df[MODEL_FEATURES])
+    model.fit(inputs)
+    model.project_feature_names_ = list(MODEL_FEATURES)
     return model
 
 
 def save_model(model):
     """Save the trained model to the configured MODEL_PATH."""
     MODEL_PATH.parent.mkdir(exist_ok=True)
-    joblib.dump({"feature_version": FEATURE_VERSION, "model": model}, MODEL_PATH)
+    joblib.dump({
+        "feature_version": FEATURE_VERSION,
+        "feature_names": list(MODEL_FEATURES),
+        "model": model,
+    }, MODEL_PATH)
 
 def model_is_current():
     """Return whether the saved artifact matches the current feature semantics."""
@@ -59,6 +82,7 @@ def model_is_current():
     return (
         isinstance(artifact, dict)
         and artifact.get("feature_version") == FEATURE_VERSION
+        and artifact.get("feature_names") == MODEL_FEATURES
         and "model" in artifact
     )
 
@@ -72,6 +96,7 @@ def load_model():
     if (
         not isinstance(artifact, dict)
         or artifact.get("feature_version") != FEATURE_VERSION
+        or artifact.get("feature_names") != MODEL_FEATURES
         or "model" not in artifact
     ):
         raise ValueError(
@@ -83,7 +108,10 @@ def load_model():
 def apply_model(model, features_df):
     """Add 'anomaly_score' and 'ml_result' columns."""
     df = features_df.copy()
-    inputs = df[MODEL_FEATURES]
+    inputs = _numeric_model_inputs(df)
+    fitted_names = getattr(model, "project_feature_names_", None)
+    if fitted_names is not None and list(fitted_names) != MODEL_FEATURES:
+        raise ValueError("Model feature order does not match the current MODEL_FEATURES.")
 
     predictions = model.predict(inputs)               # 1 = normal, -1 = anomaly
     df["anomaly_score"] = model.decision_function(inputs)   # below 0 = anomalous
