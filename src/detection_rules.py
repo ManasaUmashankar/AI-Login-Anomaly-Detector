@@ -103,15 +103,25 @@ RISK_SIGNALS = [
 
 
 def apply_rules(df):
-    """Run every rule. Adds 'rules_triggered' (a count) and 'detection_reasons' (text)."""
+    """Run detection rules and explain every signal that contributes risk."""
     df = df.copy()
     df["rules_triggered"] = 0
     df["detection_reasons"] = ""
 
     for reason, rule_function in RULES:
-        hit = rule_function(df)                  # True/False for every row
+        hit = rule_function(df).fillna(False).astype(bool)
         df["rules_triggered"] += hit.astype(int)
         df.loc[hit, "detection_reasons"] += reason + "; "
+
+    # Risk signals are not all full detection rules (for example, a new IP
+    # alone adds points). Explain these too, so a Medium score never lacks
+    # context simply because no combined rule fired.
+    for reason, _points, signal_function in RISK_SIGNALS:
+        hit = signal_function(df).fillna(False).astype(bool)
+        already_explained = df["detection_reasons"].str.contains(
+            reason, regex=False, na=False
+        )
+        df.loc[hit & ~already_explained, "detection_reasons"] += reason + "; "
 
     df["detection_reasons"] = df["detection_reasons"].str.rstrip("; ")
     return df
