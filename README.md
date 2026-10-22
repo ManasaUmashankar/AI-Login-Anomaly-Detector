@@ -199,7 +199,7 @@ With the two added +3 signals (slow brute force and impossible travel), the curr
 
 The project uses **unsupervised learning**: the model is trained without labels, because in real environments labelled attacks are rare and attack patterns keep changing. The planted suspicious rows are used only afterwards to sanity-check results.
 
-The model uses numeric time, context, rolling-failure, rapid-success, slow-brute-force, and impossible-travel features. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The last two expose recent failure and success bursts directly to the model, rather than leaving those patterns to the rule layer alone. They are project-specific rolling windows, not proof of malicious intent.
+The model uses eleven numeric features: `login_hour`, `is_new_ip`, `is_new_device`, `failed_logins_6h`, `impossible_travel`, `is_unusual_hour`, `is_unusual_location`, `login_frequency`, `location_change`, `failed_logins_45m`, and `successful_logins_5m`. It does not use `true_label` or a generator-supplied `failed_attempts` counter. The rolling windows and travel estimate are project-specific signals, not proof of malicious intent.
 
 The trained model is saved with Joblib to `models/anomaly_model_v4.pkl`, so the dashboard can load it instead of retraining every time. The artifact includes a feature-version marker; the pipeline retrains an unversioned or outdated model automatically.
 
