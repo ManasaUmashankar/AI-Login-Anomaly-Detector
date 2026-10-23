@@ -313,8 +313,7 @@ Exact labels and counts can change with the dataset and pipeline output. The das
 
 ## Dashboard Screenshots
 
-Before publishing, capture the running dashboard and add these four screenshots at the exact paths below. The image links remain pending until the files are committed to the repository: `docs/images/dashboard-overview.jpg`, `docs/images/alert-queue.jpg`, `docs/images/severity-filter.jpg`, and `docs/images/alert-investigation.jpg`.
-
+The four dashboard screenshots below are committed in the repository under `docs/images/`: `dashboard-overview.jpg`, `alert-queue.jpg`, `severity-filter.jpg`, and `alert-investigation.jpg`.
 
 The Streamlit dashboard provides a compact SOC-style workflow: review authentication trends, prioritize the alert queue, and inspect the context behind an individual event.
 
@@ -476,7 +475,6 @@ python -m src.anomaly_detector --input data/lanl_auth_sample_holdout.csv --histo
 
 The adapter does not invent IP addresses, coordinates, failed events, or labels. The timestamp origin is an arbitrary ordering anchor because the source publishes relative time offsets. **This external-data run remains unverified until you execute these commands locally**; no real-data results are claimed in this repository change.
 
-
 ## Disclaimer
 
 This is an educational cybersecurity project focused on **defensive security**: detection, monitoring, and analysis. It uses synthetic data only. It does not contain instructions for attacking real systems, stealing credentials, or bypassing authentication. Results must not be treated as proof of malicious activity, and the project is not suitable for production use.
@@ -494,7 +492,6 @@ This report compares each individual risk signal and the combined risk-score bas
 **Why this matters:** the dataset generator creates anomalies through specific scenarios (repeated failures, unusual-hour logins from unfamiliar locations/devices, and rapid-login bursts). Several of the detector rules target those same scenario characteristics. Strong rule performance on this dataset may therefore reflect how its labels were constructed, rather than independent evidence that the rules will generalise to real authentication logs.
 
 Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark. A stronger evaluation should include independently designed scenarios, benign edge cases that resemble suspicious activity, and—when available—appropriately anonymised real or public authentication data. Do not tune the rules to achieve a perfect score on the same synthetic labels and then present that score as proof of production effectiveness.
-
 
 ## Controlled Edge-Case Stress Test
 
