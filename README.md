@@ -461,7 +461,7 @@ Impossible travel and unusual device/location are behavioural analytics signals,
 
 The first synthetic dataset was too easy: the single field `device == "Unknown Device"` achieved F1 = 1.0 against its generated labels. That meant a trivial shortcut could appear perfect without learning meaningful authentication behaviour.
 
-I rebuilt the generator to mix legitimate VPN-like IP changes, travel, new devices, late-night work and typo bursts with attacks that can use familiar devices or normal-looking IPs. The new design adds 36 users, 60 days, and scenario IDs. **The rebuild is a hypothesis, not a result:** run `python -m src.robust_evaluation --seeds 20` and inspect the single-field baselines before claiming the shortcut has been eliminated. The results are not yet a public-data or production benchmark.
+I rebuilt the generator to mix legitimate VPN-like IP changes, travel, new devices, late-night work and typo bursts with attacks that can use familiar devices or normal-looking IPs. The new design adds 36 users, 60 days, and scenario IDs. **The 20-seed report should be read using minimum, maximum, mean, and standard deviation for each metric. The rebuild is a hypothesis, not a result:** run `python -m src.robust_evaluation --seeds 20` and inspect the single-field baselines before claiming the shortcut has been eliminated. The results are not yet a public-data or production benchmark.
 
 ## Public Dataset Validation
 
