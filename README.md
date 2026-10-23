@@ -149,7 +149,7 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 
 1. **Preprocessing:** fix types, clean text, remove exact duplicates and unreadable rows. Unusual but valid rows are always kept.
 2. **Feature engineering:** turn raw fields into signals such as "is this IP different from the user's usual IP?".
-3. **Rules:** check each login against five explainable rules.
+3. **Rules:** check each login against eight explainable rules.
 4. **Risk scoring:** add up points for each signal to get a score and a level.
 5. **Machine learning:** Isolation Forest scores how unusual each login is.
 6. **Combination:** merge the risk level and the ML result into one final status.
@@ -165,6 +165,7 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | Rapid login attempts | 5 or more attempts by one user within 5 minutes |
 | Repeated failed logins within 45 minutes | 5 or more failed events in the trailing 45-minute window |
 | Rapid successful login burst | 5 or more successful events in the trailing 5-minute window |
+| Failed logins against multiple accounts from one source | Failures against 4 or more distinct accounts from one IP within 15 minutes |
 
 Each rule that fires adds a readable reason to the row's `detection_reasons`. "Usual" means the most common IP, device, and location in earlier login history only. Events with the same timestamp share one baseline, and a user's first observed timestamp has no historical baseline yet.
 
@@ -188,7 +189,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | 3 to 5 | Medium |
 | 6 and above | High |
 
-The highest possible score is 19. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
+The highest possible score is 22. The rolling-window signals overlap intentionally with existing signals; they add sequence context rather than representing independent evidence.
 
 > **These points and levels are project-specific design choices, not cybersecurity standards.** They exist to rank alerts. SOC analysts have limited time, and not every alert has the same severity, so scoring helps them look at the most serious events first.
 
