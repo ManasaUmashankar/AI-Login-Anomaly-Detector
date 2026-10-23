@@ -21,7 +21,7 @@ python -m pytest -v
 
 ## Reproducible multi-seed report
 
-`python -m src.robust_evaluation --seeds 20` writes per-seed/per-window rows to `reports/robust-evaluation.csv` and a mean/standard-deviation summary to `reports/robust-evaluation-summary.csv`. It compares single-field baselines, rules-only, Isolation Forest and a diagnostic hybrid. It also sweeps Isolation Forest contamination settings of 0.01, 0.03, 0.05 and 0.10 to show how binary predictions change with the assumed anomaly share. PR-AUC is calculated from continuous `score_samples` anomaly scores and does not depend on a chosen binary threshold.
+`python -m src.robust_evaluation --seeds 20` writes per-seed/per-window rows to `reports/robust-evaluation.csv` and a summary with minimum, maximum, mean, and standard deviation across seed-level metrics to `reports/robust-evaluation-summary.csv`. It compares single-field baselines, rules-only, Isolation Forest and a diagnostic hybrid. It also sweeps Isolation Forest contamination settings of 0.01, 0.03, 0.05 and 0.10 to show how binary predictions change with the assumed anomaly share. PR-AUC is calculated from continuous `score_samples` anomaly scores and does not depend on a chosen binary threshold.
 
 Scenario-level detection rate counts a scenario as detected if at least one clearly anomalous event in that scenario is flagged. Time-to-detect is the delay from the first labelled anomalous event in the scenario to its first alert. Scenarios without an alert have no finite time-to-detect and must be reported as missed, not silently removed from the detection-rate denominator.
 
