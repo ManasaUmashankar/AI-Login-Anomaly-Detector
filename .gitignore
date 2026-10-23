@@ -24,3 +24,6 @@ Thumbs.db
 # Test and tool caches
 .pytest_cache/
 .coverage
+
+# Generated local pytest output (UTF-16 LE; not a test module)
+test-results.txt
