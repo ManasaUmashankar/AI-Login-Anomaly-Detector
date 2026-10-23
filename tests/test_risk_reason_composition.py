@@ -32,7 +32,12 @@ def test_triggered_risk_signals_are_explained_without_duplicate_reasons():
     result = apply_rules(features)
     reasons = [reason.strip() for reason in result.loc[0, "detection_reasons"].split(";")]
 
+    # A specific rule can already explain a broader signal: for example,
+    # "New IP address at an unusual hour" explains the "New IP address" signal.
     for reason in SIGNAL_REASONS.values():
-        assert reason in reasons
+        assert any(reason in existing_reason for existing_reason in reasons), (
+            f"Missing explanation for risk signal: {reason!r}; reasons={reasons!r}"
+        )
 
+    # Exact duplicate reasons should never be emitted.
     assert len(reasons) == len(set(reasons))
