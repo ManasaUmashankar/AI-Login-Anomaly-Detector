@@ -116,6 +116,25 @@ RISK_SIGNALS = [
     ("Impossible travel between successful logins", 3, rule_impossible_travel),
 ]
 
+# Keep each risk-scoring signal tied to a human-readable explanation.
+# Some signals deliberately reuse an existing rule's wording to avoid duplicate reasons.
+SIGNAL_REASONS = {
+    "Multiple failed login attempts": "Multiple failed login attempts",
+    "Successful login after repeated failures": "Successful login after repeated failures",
+    "New IP address": "New IP address",
+    "New device": "New device",
+    "Unusual login location": "Unusual login location",
+    "Rapid login attempts": "Rapid login attempts",
+    "Unusual login hour": "Unusual login hour",
+    "Repeated failures within 45 minutes": "Multiple failed login attempts",
+    "Rapid successful logins within 5 minutes": "Rapid successful login burst",
+    "Multiple accounts failed from one source within 15 minutes": (
+        "Failed logins against multiple accounts from one source"
+    ),
+    "Repeated failures within six hours": "Slow brute-force pattern within six hours",
+    "Impossible travel between successful logins": "Impossible travel between successful logins",
+}
+
 
 def apply_rules(df):
     """Run detection rules and explain every signal that contributes risk."""
@@ -131,31 +150,14 @@ def apply_rules(df):
         df["rules_triggered"] += hit.astype(int)
         df.loc[hit, "detection_reasons"] += reason + "; "
 
-    # Add explanations for risk-only signals without duplicating an existing
-    # rule explanation for the same underlying condition.
-    equivalent_reasons = {
-        "Multiple failed login attempts": {"Repeated failures within 45 minutes"},
-        "Repeated failed logins within 45 minutes": {"Repeated failures within 45 minutes"},
-        "Rapid successful login burst": {"Rapid successful logins within 5 minutes"},
-        "Rapid successful logins within 5 minutes": {"Rapid successful login burst"},
-        "Failed logins against multiple accounts from one source": {
-            "Multiple accounts failed from one source within 15 minutes"
-        },
-        "Multiple accounts failed from one source within 15 minutes": {
-            "Failed logins against multiple accounts from one source"
-        },
-        "Slow brute-force pattern within six hours": {"Repeated failures within six hours"},
-        "Repeated failures within six hours": {"Slow brute-force pattern within six hours"},
-    }
-    for reason, _points, signal_function in RISK_SIGNALS:
+    # Every scored signal must be explainable. Reuse the canonical reason mapping
+    # so a condition already described by a detection rule is not repeated.
+    for signal_name, _points, signal_function in RISK_SIGNALS:
+        reason = SIGNAL_REASONS[signal_name]
         hit = signal_function(df).fillna(False).astype(bool)
         already_explained = df["detection_reasons"].str.contains(
             reason, regex=False, na=False
         )
-        for equivalent in equivalent_reasons.get(reason, set()):
-            already_explained |= df["detection_reasons"].str.contains(
-                equivalent, regex=False, na=False
-            )
         df.loc[hit & ~already_explained, "detection_reasons"] += reason + "; "
 
     df["detection_reasons"] = df["detection_reasons"].str.rstrip("; ")
