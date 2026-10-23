@@ -144,12 +144,12 @@ Labels are synthetic assumptions, not independent ground truth. The generator is
 
 ## Detection Methodology
 
-1. **Preprocessing:** fix types, clean text, remove exact duplicates and unreadable rows. Unusual but valid rows are always kept.
-2. **Feature engineering:** turn raw fields into signals such as "is this IP different from the user's usual IP?".
-3. **Rules:** check each login against explainable rules.
-4. **Risk scoring:** add up points for each signal to get a score and a level.
+1. **Preprocessing:** Fix types, clean text, remove exact duplicates and unreadable rows. Unusual but valid rows are always kept.
+2. **Feature engineering:** Turn raw fields into signals such as "is this IP different from the user's usual IP?"
+3. **Rules:** Check each login against explainable rules.
+4. **Risk scoring:** Add up points for each signal to get a score and a level.
 5. **Machine learning:** Isolation Forest scores how unusual each login is.
-6. **Combination:** merge the risk level and the ML result into one final status.
+6. **Combination:** Merge the risk level and the ML result into one final status.
 
 ### Rule-based detection
 
