@@ -241,6 +241,7 @@ AI-Login-Anomaly-Detector/
 │   ├── evaluate_model.py       # temporal holdout and multi-seed evaluation
 │   ├── audit_label_alignment.py # audits rule/label overlap
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
+│   ├── evaluation_suite.py       # combines audits and evaluation reports
 │   └── utils.py                 # shared file paths
 ├── models/
 │   └── anomaly_model_v3.pkl
@@ -279,7 +280,8 @@ python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
 python -m src.evaluate_model                # 4. run 20-seed chronological evaluation
 python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
-python -m streamlit run dashboard/app.py   # 6. open the dashboard
+python -m src.evaluation_suite              # 6. write combined CSV and Markdown reports
+python -m streamlit run dashboard/app.py   # 7. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
@@ -354,6 +356,12 @@ python -m pytest -v
 ```
 
 The tests use small hand-made logs with known correct answers, plus checks on the full pipeline. They cover dataset loading, preprocessing, feature generation, detection rules, risk scoring, ML output, normal cases, and suspicious cases.
+
+## Combined Evaluation Suite
+
+Run `python -m src.evaluation_suite` to execute the label/rule alignment audit, 20-seed chronological evaluation, and controlled stress test in one reproducible command. It compares Isolation Forest, the rule baseline, and a diagnostic hybrid on the stress cases, with both event-level and scenario-level metrics. Ambiguous stress cases remain separately reported rather than being silently treated as benign or malicious.
+
+The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. Inspect the label-alignment results for overlap between the synthetic label-generation patterns and the detector rules. The report intentionally does not overwrite the headline metrics in this README: review the output and update any published metric snapshot only after confirming what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
 
 ## Limitations
 
