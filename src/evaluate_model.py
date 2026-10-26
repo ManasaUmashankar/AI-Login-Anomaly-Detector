@@ -94,7 +94,7 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
     working["true_label"] = normalize_labels(working["true_label"]).values
 
     # Keep the labels only for scoring; preprocessing preserves the optional label.
-    cleaned = preprocess_logs(working)
+    cleaned = preprocess_logs(working, verbose=False)
     if len(cleaned) < 4:
         raise ValueError("At least four valid login rows are required for a temporal holdout.")
 
