@@ -133,7 +133,7 @@ def evaluate_temporal_holdout(df, train_fraction=0.70):
 
 
 
-def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
+def evaluate_temporal_windows(df, train_fraction=0.40, windows=4, random_state=None):
     """Evaluate consecutive future windows with an expanding training history."""
     if not isinstance(windows, int) or windows < 2:
         raise ValueError("windows must be an integer of at least 2.")
@@ -170,7 +170,12 @@ def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
 
         train_features = features.iloc[:test_start]
         test_features = features.iloc[test_start:test_end]
-        model = train_model(train_features)
+        # Preserve existing monkeypatch/test behavior when no seed is supplied.
+        model = (
+            train_model(train_features)
+            if random_state is None
+            else train_model(train_features, random_state=random_state)
+        )
         predictions = apply_model(model, test_features)
 
         y_true = normalize_labels(test_features["true_label"])
@@ -208,6 +213,64 @@ def evaluate_temporal_windows(df, train_fraction=0.40, windows=4):
 
     return results
 
+
+
+def evaluate_seed_sweep(df, seeds=range(20), train_fraction=0.40, windows=4):
+    """Evaluate multiple model seeds and summarize mean/std of window-averaged metrics.
+
+    Each seed uses the same chronological splits and labels; only the model's
+    random_state changes. Results remain synthetic-data evaluation, not a
+    real-world performance guarantee.
+    """
+    seed_list = list(seeds)
+    if not seed_list:
+        raise ValueError("seeds must contain at least one integer seed.")
+    if any(not isinstance(seed, int) for seed in seed_list):
+        raise ValueError("every seed must be an integer.")
+    if len(set(seed_list)) != len(seed_list):
+        raise ValueError("seeds must be unique.")
+
+    runs = {}
+    for seed in seed_list:
+        runs[seed] = evaluate_temporal_windows(
+            df,
+            train_fraction=train_fraction,
+            windows=windows,
+            random_state=seed,
+        )
+
+    metric_names = ("precision", "recall", "f1", "false_positive_rate", "accuracy")
+    summary = {}
+    for model_key in ("metrics", "baseline_metrics"):
+        summary[model_key] = {}
+        for metric in metric_names:
+            per_seed_means = [
+                sum(window[model_key][metric] for window in runs[seed]) / len(runs[seed])
+                for seed in seed_list
+            ]
+            summary[model_key][metric] = {
+                "mean": float(pd.Series(per_seed_means).mean()),
+                "std": float(pd.Series(per_seed_means).std(ddof=1)) if len(per_seed_means) > 1 else 0.0,
+                "per_seed_mean": dict(zip(seed_list, per_seed_means)),
+            }
+
+    return {"seeds": seed_list, "runs": runs, "summary": summary}
+
+
+def print_seed_sweep_report(result):
+    """Print the seed-sweep summary with mean and sample standard deviation."""
+    print("\n========== MULTI-SEED TEMPORAL EVALUATION ==========")
+    print(f"Seeds: {result['seeds']}")
+    print("Values are mean +/- sample standard deviation across seed-level window means.")
+    print("All results use synthetic data; this is not a real-world benchmark.")
+    for metric in ("precision", "recall", "f1", "false_positive_rate", "accuracy"):
+        ml = result["summary"]["metrics"][metric]
+        baseline = result["summary"]["baseline_metrics"][metric]
+        print(
+            f"{metric.replace('_', ' ').title():22s} "
+            f"ML {ml['mean']:.4f} +/- {ml['std']:.4f} | "
+            f"Rule baseline {baseline['mean']:.4f} +/- {baseline['std']:.4f}"
+        )
 
 def print_temporal_window_report(results):
     """Print per-window metrics and an unweighted mean across windows."""
@@ -250,8 +313,11 @@ def print_temporal_window_report(results):
 
 def main():
     df = load_logs(include_labels=True)
-    results = evaluate_temporal_windows(df, train_fraction=0.40, windows=4)
-    print_temporal_window_report(results)
+    seed_results = evaluate_seed_sweep(df, seeds=range(20), train_fraction=0.40, windows=4)
+    print_seed_sweep_report(seed_results)
+    detail_seed = 42 if 42 in seed_results["runs"] else seed_results["seeds"][0]
+    print(f"\nDetailed window metrics for seed {detail_seed}:")
+    print_temporal_window_report(seed_results["runs"][detail_seed])
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from src.anomaly_detector import (
     save_model,
     train_model,
 )
-from src.detection_rules import apply_risk_scores, apply_rules, risk_level_for
+from src.detection_rules import RISK_SIGNALS, SIGNAL_REASONS, apply_risk_scores, apply_rules, risk_level_for
 from src.feature_engineering import build_features
 from src.preprocessing import REQUIRED_COLUMNS, demo_messy_data, preprocess_logs
 from src.read_dataset import load_logs
@@ -448,3 +448,54 @@ def test_multi_window_evaluation_rejects_fewer_than_two_windows():
 
     with pytest.raises(ValueError, match="at least 2"):
         evaluate_temporal_windows(pd.DataFrame(), windows=1)
+
+
+# ---------- Explainability consistency ----------
+def test_every_risk_signal_has_a_nonempty_human_readable_reason():
+    signal_names = [name for name, _points, _function in RISK_SIGNALS]
+    assert set(signal_names) == set(SIGNAL_REASONS)
+    assert all(isinstance(SIGNAL_REASONS[name], str) and SIGNAL_REASONS[name].strip()
+               for name in signal_names)
+
+
+def test_signal_reasons_do_not_claim_an_attack_is_confirmed():
+    forbidden_phrases = ("confirmed attack", "account is hacked", "definitely malicious")
+    assert all(
+        not any(phrase in reason.lower() for phrase in forbidden_phrases)
+        for reason in SIGNAL_REASONS.values()
+    )
+
+
+# ---------- Multi-seed evaluation ----------
+def test_seed_sweep_returns_mean_and_std_and_uses_requested_seeds(monkeypatch):
+    from src.evaluate_model import evaluate_seed_sweep
+
+    monkeypatch.setattr(
+        "src.evaluate_model.train_model",
+        lambda frame, random_state=42: object(),
+    )
+    monkeypatch.setattr(
+        "src.evaluate_model.apply_model",
+        lambda model, frame: pd.DataFrame({"ml_result": ["Normal"] * len(frame)}),
+    )
+
+    rows = [make_row(f"2026-09-{day:02d} 10:00:00") for day in range(1, 13)]
+    frame = make_logs(rows)
+    frame["true_label"] = ["normal", "anomaly"] * 6
+
+    result = evaluate_seed_sweep(frame, seeds=[3, 7, 11], train_fraction=0.40, windows=3)
+
+    assert result["seeds"] == [3, 7, 11]
+    assert set(result["runs"]) == {3, 7, 11}
+    assert result["summary"]["metrics"]["f1"]["mean"] == pytest.approx(0.0)
+    assert result["summary"]["metrics"]["f1"]["std"] == pytest.approx(0.0)
+    assert set(result["summary"]["baseline_metrics"]["f1"]) == {"mean", "std", "per_seed_mean"}
+
+
+def test_seed_sweep_rejects_empty_or_duplicate_seeds():
+    from src.evaluate_model import evaluate_seed_sweep
+
+    with pytest.raises(ValueError, match="at least one|contain at least one"):
+        evaluate_seed_sweep(pd.DataFrame(), seeds=[])
+    with pytest.raises(ValueError, match="unique"):
+        evaluate_seed_sweep(pd.DataFrame(), seeds=[4, 4])

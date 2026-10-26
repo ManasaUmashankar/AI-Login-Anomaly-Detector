@@ -29,12 +29,17 @@ FINAL_COLUMNS = [
 ]
 
 
-def train_model(features_df):
-    """Teach the model what the data looks like (no labels used)."""
+def train_model(features_df, random_state=RANDOM_STATE):
+    """Teach the model what the data looks like (no labels used).
+
+    random_state can be varied during evaluation to measure sensitivity to
+    Isolation Forest randomness. Production/pipeline training stays deterministic
+    by default.
+    """
     model = IsolationForest(
         n_estimators=N_TREES,
         contamination=CONTAMINATION,
-        random_state=RANDOM_STATE,
+        random_state=random_state,
     )
     model.fit(features_df[MODEL_FEATURES])
     return model
