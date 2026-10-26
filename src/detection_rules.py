@@ -102,6 +102,22 @@ RISK_SIGNALS = [
 ]
 
 
+# Human-readable explanations for every risk-scoring signal. Keep keys aligned
+# with the first element of RISK_SIGNALS so dashboards/reports can explain scores.
+SIGNAL_REASONS = {
+    "Multiple failed login attempts": "The current failure counter reached the configured threshold.",
+    "Successful login after repeated failures": "A successful login followed multiple failed attempts.",
+    "New IP address": "The source IP differs from the user's earlier observed IP history.",
+    "New device": "The device differs from the user's earlier observed device history.",
+    "Unusual login location": "The location differs from the user's earlier observed location history.",
+    "Rapid login attempts": "The user generated several login events within the configured short window.",
+    "Unusual login hour": "The event occurred outside the project's usual-hour range.",
+    "Repeated failures within 45 minutes": "At least five failed events occurred in the trailing 45-minute window.",
+    "Rapid successful logins within 5 minutes": "At least five successful events occurred in the trailing 5-minute window.",
+    "Multiple accounts failed from one source within 15 minutes": "One source IP generated failures against at least four distinct accounts within 15 minutes.",
+}
+
+
 def apply_rules(df):
     """Run every rule. Adds 'rules_triggered' (a count) and 'detection_reasons' (text)."""
     df = df.copy()
