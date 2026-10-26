@@ -146,7 +146,7 @@ def evaluate_temporal_windows(df, train_fraction=0.40, windows=4, random_state=N
     working["timestamp"] = pd.to_datetime(working["timestamp"], errors="coerce")
     working = working.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
     working["true_label"] = normalize_labels(working["true_label"]).values
-    cleaned = preprocess_logs(working)
+    cleaned = preprocess_logs(working, verbose=False)
     features = build_features(cleaned)
 
     group_starts = _temporal_group_starts(features)
