@@ -301,33 +301,16 @@ Exact labels and counts can change with the dataset and pipeline output. The das
 
 ## Dashboard Screenshots
 
-The Streamlit dashboard provides a compact SOC-style workflow: review authentication trends, prioritize the alert queue, and inspect the context behind an individual event.
+The screenshot files referenced in an earlier version of this README are not currently present in the repository. To avoid broken image links or implying that screenshots have been verified, this section will be populated after fresh screenshots are captured from the current Streamlit dashboard.
 
-### Security overview
+Recommended screenshots to add under `docs/images/`:
 
-![AI Login Anomaly Detector dashboard overview](docs/images/dashboard-overview.jpg)
+- `dashboard-overview.jpg` — overview metrics and authentication trends
+- `alert-queue.jpg` — alert queue with risk scores and severity
+- `severity-filter.jpg` — the alert table with the relevant severity filter visibly applied
+- `alert-investigation.jpg` — selected event details and detection reasons
 
-*Overview metrics and authentication telemetry from the synthetic login dataset.*
-
-### Analyst alert queue
-
-![Analyst alert queue with risk scores and severity](docs/images/alert-queue.jpg)
-
-*Alerts are ordered by risk score so higher-priority events can be reviewed first.*
-
-### Alert table detail
-
-![Alert table showing event timestamps, accounts, source IPs, risk scores, and detection reasons](docs/images/severity-filter.jpg)
-
-*The event table surfaces the fields an analyst can use to triage suspicious activity. This screenshot illustrates the queue; it should only be described as a severity-filter demo if the High-only filter was actually applied.*
-
-### Event investigation
-
-![Selected login event investigation showing risk score, severity, ML signal, event context, and detection reasons](docs/images/alert-investigation.jpg)
-
-*Inspect the selected event's context and the reasons it was flagged. An alert is a lead for investigation, not proof of compromise.*
-
-> Screenshots show a local prototype using synthetic data, not a live production SOC.
+Only include screenshots that actually match the described view. Use synthetic data and avoid exposing credentials, tokens, or personal information.
 
 ## Example Output
 
