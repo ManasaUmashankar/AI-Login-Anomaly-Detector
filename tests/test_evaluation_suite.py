@@ -24,7 +24,7 @@ def test_build_overview_rows_compares_temporal_event_and_scenario_scopes():
         "controlled_stress_event_level",
         "controlled_stress_scenario_level",
     }
-    assert len(frame) == 25
+    assert len(frame) == 40
     selected = frame[
         (frame["evaluation_scope"] == "controlled_stress_event_level")
         & (frame["detector"] == "Hybrid (ML OR rules)")
