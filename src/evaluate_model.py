@@ -315,8 +315,9 @@ def main():
     df = load_logs(include_labels=True)
     seed_results = evaluate_seed_sweep(df, seeds=range(20), train_fraction=0.40, windows=4)
     print_seed_sweep_report(seed_results)
-    print(\"\\nDetailed window metrics for seed 42:\")
-    print_temporal_window_report(seed_results[\"runs\"].get(42, next(iter(seed_results[\"runs\"].values()))))
+    detail_seed = 42 if 42 in seed_results["runs"] else seed_results["seeds"][0]
+    print(f"\\nDetailed window metrics for seed {detail_seed}:")
+    print_temporal_window_report(seed_results["runs"][detail_seed])
 
 
 if __name__ == "__main__":
