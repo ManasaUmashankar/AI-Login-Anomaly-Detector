@@ -338,9 +338,25 @@ The model is fitted only on rows earlier than each holdout window; ground-truth 
 
 ## Latest Evaluation Snapshot
 
-Historical baseline snapshot (2026-10-21; before the multi-seed evaluation was added): across four chronological holdout windows, Isolation Forest achieved an unweighted mean F1-score of **0.9583** and recall of **0.9286**; the rule-based risk-score baseline achieved mean F1 of **0.9947** and recall of **1.0000**. In the separate controlled stress test, the hybrid detector achieved event-level F1 of **0.667** and recall of **0.500** across 34 clearly labelled events; 17 ambiguous events were reviewed separately. These figures are historical and have **not** been reproduced with the new 20-seed evaluator. Do not present them as the new evaluator's results.
+Evaluation run on **2026-10-26** using the 20-seed chronological evaluator (four holdout windows per seed):
 
-These are results on synthetic, deliberately designed data, not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. Run the evaluator and update this section only after the new results have been produced and reviewed. See the [full evaluation guide](docs/evaluation-guide.md) for metric interpretation.
+| Metric | Isolation Forest | Rule baseline |
+|---|---:|---:|
+| Mean F1-score | 0.9376 | 0.9947 |
+| Mean precision | 0.9906 | 0.9896 |
+| Mean recall | 0.9071 | 1.0000 |
+| Mean false-positive rate | 0.0010 | 0.0012 |
+| Mean accuracy | 0.9963 | 0.9990 |
+
+Across seeds, Isolation Forest F1 standard deviation was **0.0135** and recall standard deviation was **0.0180**. The rule baseline's metrics were effectively unchanged across seeds because it is deterministic. These are averages of window-level metrics, not metrics pooled over all holdout rows.
+
+In the controlled edge-case stress test, **34 clearly labelled events** were scored and **17 ambiguous events** were reviewed separately. Event-level F1 / recall were: Isolation Forest **0.4516 / 0.2917** (7 TP, 17 FN, 0 FP); rule baseline **0.5455 / 0.3750** (9 TP, 15 FN, 0 FP); hybrid (ML OR rules) **0.6667 / 0.5000** (12 TP, 12 FN, 0 FP). Event-level results show that even the hybrid missed half of the clearly labelled positive events in this small stress set.
+
+At scenario level, the stress set contained six labelled anomaly scenarios and five benign scenarios. The rule baseline and hybrid detected all six labelled anomaly scenarios and raised no alerts on the five benign scenarios; Isolation Forest detected four of six anomaly scenarios. A scenario counts as detected if **at least one event** in it triggers an alert, so scenario-level recall can be much higher than event-level recall.
+
+The synthetic label/rule alignment audit reported F1 **0.9613** for the combined risk score threshold (score >= 3), with precision **0.9355**, recall **0.9886**, and false-positive rate **0.0040**. The password-spray rule had no true positives in the primary 1,588-row dataset; the controlled stress set separately tests cross-account spraying. This is a useful clue that the primary generator does not adequately exercise every implemented detection signal.
+
+**Interpretation:** these are engineering diagnostics on synthetic, deliberately designed data—not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. The strong rule-baseline result should be treated cautiously until evaluated on an independent, labelled dataset. See the [full evaluation guide](docs/evaluation-guide.md) and the generated `reports/evaluation_report.md` for metric interpretation.
 
 ## Project Documentation
 
