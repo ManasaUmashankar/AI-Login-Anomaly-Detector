@@ -104,6 +104,12 @@ def test_preprocessing_fixes_messy_data():
     assert clean["location"].notna().all()
 
 
+def test_preprocessing_can_suppress_summary(capsys):
+    clean = preprocess_logs(demo_messy_data(), verbose=False)
+    assert len(clean) == 4
+    assert capsys.readouterr().out == ""
+
+
 def test_preprocessing_keeps_unusual_rows():
     clean = preprocess_logs(demo_messy_data())
     moscow = clean[clean["location"] == "Moscow, Russia"]
