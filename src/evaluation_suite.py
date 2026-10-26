@@ -20,7 +20,7 @@ def _metric_rows(scope, detector_metrics):
                     "evaluation_scope": scope, "detector": detector, "metric": metric,
                     "mean": metrics[metric], "std": None,
                     "tp": metrics.get("tp"), "fp": metrics.get("fp"),
-                    "fn": metrics.get("fn"), "tn": metrics.get("tn),
+                    "fn": metrics.get("fn"), "tn": metrics.get("tn"),
                 })
     return rows
 
@@ -145,7 +145,7 @@ def run_evaluation_suite(df=None, seeds=range(20), train_fraction=0.40, windows=
                     "actual_anomalies": window["metadata"]["actual_anomalies"],
                     "predicted_anomalies": window["metadata"]["predicted_anomalies"] if key == "metrics" else None,
                     **{metric: values[metric] for metric in METRICS},
-                    **{name: values[name] for name in ("tp", "fp", "fn", "tn)},
+                    **{name: values[name] for name in ("tp", "fp", "fn", "tn")},
                 })
     pd.DataFrame(seed_rows).to_csv(out_dir / "multi_seed_summary.csv", index=False)
     pd.DataFrame(temporal_rows).to_csv(out_dir / "temporal_window_metrics.csv", index=False)
