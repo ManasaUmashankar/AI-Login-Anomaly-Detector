@@ -11,7 +11,7 @@ from src.anomaly_detector import (
     save_model,
     train_model,
 )
-from src.detection_rules import apply_risk_scores, apply_rules, risk_level_for
+from src.detection_rules import RISK_SIGNALS, SIGNAL_REASONS, apply_risk_scores, apply_rules, risk_level_for
 from src.feature_engineering import build_features
 from src.preprocessing import REQUIRED_COLUMNS, demo_messy_data, preprocess_logs
 from src.read_dataset import load_logs
@@ -448,3 +448,19 @@ def test_multi_window_evaluation_rejects_fewer_than_two_windows():
 
     with pytest.raises(ValueError, match="at least 2"):
         evaluate_temporal_windows(pd.DataFrame(), windows=1)
+
+
+# ---------- Explainability consistency ----------
+def test_every_risk_signal_has_a_nonempty_human_readable_reason():
+    signal_names = [name for name, _points, _function in RISK_SIGNALS]
+    assert set(signal_names) == set(SIGNAL_REASONS)
+    assert all(isinstance(SIGNAL_REASONS[name], str) and SIGNAL_REASONS[name].strip()
+               for name in signal_names)
+
+
+def test_signal_reasons_do_not_claim_an_attack_is_confirmed():
+    forbidden_phrases = ("confirmed attack", "account is hacked", "definitely malicious")
+    assert all(
+        not any(phrase in reason.lower() for phrase in forbidden_phrases)
+        for reason in SIGNAL_REASONS.values()
+    )
