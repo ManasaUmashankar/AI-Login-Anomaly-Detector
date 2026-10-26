@@ -83,7 +83,7 @@ def validate_values(df):
     return df[valid], removed
 
 
-def preprocess_logs(df):
+def preprocess_logs(df, verbose=True):
     """Clean login logs and preserve optional ground-truth labels."""
     df = df.copy()
     check_required_columns(df)
@@ -99,13 +99,14 @@ def preprocess_logs(df):
 
     df = df.sort_values("timestamp").reset_index(drop=True)
 
-    print("----- PREPROCESSING SUMMARY -----")
-    print(f"Rows at start:                {rows_at_start}")
-    print(f"Missing values found (filled): {missing_found}")
-    print(f"Duplicate rows removed:       {duplicates}")
-    print(f"Invalid timestamps removed:   {bad_timestamps}")
-    print(f"Invalid values removed:       {bad_values}")
-    print(f"Rows at end:                  {len(df)}")
+    if verbose:
+        print("----- PREPROCESSING SUMMARY -----")
+        print(f"Rows at start:                {rows_at_start}")
+        print(f"Missing values found (filled): {missing_found}")
+        print(f"Duplicate rows removed:       {duplicates}")
+        print(f"Invalid timestamps removed:   {bad_timestamps}")
+        print(f"Invalid values removed:       {bad_values}")
+        print(f"Rows at end:                  {len(df)}")
 
     return df
 
