@@ -259,7 +259,7 @@ def evaluate_seed_sweep(df, seeds=range(20), train_fraction=0.40, windows=4):
 
 def print_seed_sweep_report(result):
     """Print the seed-sweep summary with mean and sample standard deviation."""
-    print("\\n========== MULTI-SEED TEMPORAL EVALUATION ==========")
+    print("\n========== MULTI-SEED TEMPORAL EVALUATION ==========")
     print(f"Seeds: {result['seeds']}")
     print("Values are mean +/- sample standard deviation across seed-level window means.")
     print("All results use synthetic data; this is not a real-world benchmark.")
@@ -316,7 +316,7 @@ def main():
     seed_results = evaluate_seed_sweep(df, seeds=range(20), train_fraction=0.40, windows=4)
     print_seed_sweep_report(seed_results)
     detail_seed = 42 if 42 in seed_results["runs"] else seed_results["seeds"][0]
-    print(f"\\nDetailed window metrics for seed {detail_seed}:")
+    print(f"\nDetailed window metrics for seed {detail_seed}:")
     print_temporal_window_report(seed_results["runs"][detail_seed])
 
 
