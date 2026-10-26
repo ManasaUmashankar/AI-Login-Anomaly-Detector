@@ -182,6 +182,7 @@ Each rule that fires adds a readable reason to the row's `detection_reasons`. "U
 | Unusual login hour | +1 |
 | Repeated failures within 45 minutes | +3 |
 | Rapid successful logins within 5 minutes | +3 |
+| Multiple accounts failed from one source within 15 minutes | +3 |
 
 | Total score | Level |
 |---|---|
@@ -235,8 +236,9 @@ AI-Login-Anomaly-Detector/
 │   ├── read_dataset.py          # loads and explores logs (Pandas)
 │   ├── preprocessing.py         # cleaning and validation
 │   ├── feature_engineering.py   # turns logs into features
-│   ├── detection_rules.py       # rules and risk scoring
+│   ├── detection_rules.py       # rules, risk scoring, signal explanations
 │   ├── anomaly_detector.py      # Isolation Forest and combined pipeline
+│   ├── evaluate_model.py       # temporal holdout and multi-seed evaluation
 │   ├── audit_label_alignment.py # audits rule/label overlap
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
 │   └── utils.py                 # shared file paths
@@ -275,7 +277,7 @@ Run these from the project folder with the virtual environment active:
 python -m src.generate_dataset             # 1. create the synthetic logs
 python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
-python -m src.evaluate_model                # 4. evaluate chronological holdout windows
+python -m src.evaluate_model                # 4. run 20-seed chronological evaluation
 python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
 python -m streamlit run dashboard/app.py   # 6. open the dashboard
 ```
@@ -345,15 +347,15 @@ The dataset contains planted synthetic scenarios. Performance on those scenarios
 
 ## Model Evaluation
 
-Run `python -m src.evaluate_model` to perform **four chronological holdout windows**. The model starts with the earliest 40% of valid login events, then evaluates consecutive later windows while expanding the training history. Each window reports precision, recall, F1-score, false-positive rate, accuracy, and a confusion matrix. The report also compares Isolation Forest with a simple explainable rule-based baseline that flags rows with a risk score of 3 or higher.
+Run `python -m src.evaluate_model` to perform a **20-seed temporal evaluation** across four chronological holdout windows per seed. Each seed keeps the same time-ordered splits but varies Isolation Forest's random state. The report summarizes mean and sample standard deviation of each metric across seed-level averages, compares Isolation Forest with the rule-based risk-score baseline (score >= 3), and prints detailed window metrics for seed 42. This measures sensitivity to model randomness; it does not measure uncertainty across different datasets or real environments.
 
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
 ## Latest Evaluation Snapshot
 
-Latest local run (2026-10-21) on synthetic login data: across four chronological holdout windows, Isolation Forest achieved an unweighted mean F1-score of **0.9583** and recall of **0.9286**; the rule-based risk-score baseline achieved mean F1 of **0.9947** and recall of **1.0000**. In the separate controlled stress test, the hybrid detector achieved event-level F1 of **0.667** and recall of **0.500** across 34 clearly labelled events; 17 ambiguous events were reviewed separately.
+Historical baseline snapshot (2026-10-21; before the multi-seed evaluation was added): across four chronological holdout windows, Isolation Forest achieved an unweighted mean F1-score of **0.9583** and recall of **0.9286**; the rule-based risk-score baseline achieved mean F1 of **0.9947** and recall of **1.0000**. In the separate controlled stress test, the hybrid detector achieved event-level F1 of **0.667** and recall of **0.500** across 34 clearly labelled events; 17 ambiguous events were reviewed separately. These figures are historical and have **not** been reproduced with the new 20-seed evaluator. Do not present them as the new evaluator's results.
 
-These are results on synthetic, deliberately designed data, not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. See the [full evaluation guide](docs/evaluation-guide.md) for per-window metrics and interpretation.
+These are results on synthetic, deliberately designed data, not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. Run the evaluator and update this section only after the new results have been produced and reviewed. See the [full evaluation guide](docs/evaluation-guide.md) for metric interpretation.
 
 ## Project Documentation
 
@@ -399,7 +401,7 @@ A production system would improve these with real log ingestion, per-user baseli
 - Real-time monitoring
 - Email or chat alert notifications
 - Tune sequence windows against diverse benign and malicious scenarios
-- Add cross-account password-spraying correlation while reviewing shared-network false positives
+- Validate cross-account password-spraying correlation against more benign shared-network cases
 - Better behavioural baselines per user
 - More advanced anomaly detection methods
 - Scheduled model retraining
