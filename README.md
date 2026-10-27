@@ -123,7 +123,7 @@ data/login_logs.csv
 
 The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users. The random seed is fixed, so the data is identical on every run.
+`src/generate_dataset.py` creates `data/login_logs.csv` with **1,579 records** over 30 days for four users in the current generator version. The fixed random seed makes generation reproducible. The dataset contains **1,500 normal rows and 79 anomaly-labelled rows** (about 5% anomalies).
 
 | Column | Meaning |
 |---|---|
@@ -137,13 +137,9 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | `user_agent` | Browser or program identifier |
 | `session_id` | Unique ID for the attempt |
 
-**Normal behaviour (1,500 records):** familiar IP, device, and location, working hours, mostly successful logins, with an occasional typo.
+**Normal behaviour (1,500 records):** mostly familiar context and working-hour logins, with occasional failed attempts. A small share of benign logins deliberately use a changed IP/device context to ensure novelty alone does not define the label.
 
-**Suspicious behaviour planted (88 records):**
-
-- 5 brute-force-style runs (6 to 12 fast failures, 3 of them ending in a success)
-- 8 unusual logins (new IP, new device, foreign location, 1 to 4 AM)
-- 4 rapid-login bursts (6 logins in about a minute)
+**Anomaly-labelled behaviour (79 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
 
 ## Detection Methodology
 
@@ -338,26 +334,25 @@ The model is fitted only on rows earlier than each holdout window; ground-truth 
 
 ## Latest Evaluation Snapshot
 
-Evaluation run on **2026-10-26** using the 20-seed chronological evaluator (four holdout windows per seed):
+Evaluation run on **2026-10-27** after regenerating the current 1,579-row synthetic dataset (1,500 normal; 79 anomaly-labelled rows). The 20-seed chronological evaluation uses four holdout windows per seed.
 
 | Metric | Isolation Forest | Rule baseline |
 |---|---:|---:|
-| Mean F1-score | 0.9376 | 0.9947 |
-| Mean precision | 0.9906 | 0.9896 |
-| Mean recall | 0.9071 | 1.0000 |
-| Mean false-positive rate | 0.0010 | 0.0012 |
-| Mean accuracy | 0.9963 | 0.9990 |
+| Mean F1-score | 0.7782 | 0.4813 |
+| Mean precision | 0.7421 | 0.3596 |
+| Mean recall | 0.8952 | 0.9306 |
+| Mean false-positive rate | 0.0078 | 0.0641 |
+| Mean accuracy | 0.9873 | 0.9335 |
 
-Across seeds, Isolation Forest F1 standard deviation was **0.0135** and recall standard deviation was **0.0180**. The rule baseline's metrics were effectively unchanged across seeds because it is deterministic. These are averages of window-level metrics, not metrics pooled over all holdout rows.
+Isolation Forest F1 standard deviation was **0.0240**; the rule baseline is deterministic on this dataset. These are averages across seed-level chronological-window metrics, not pooled metrics. Seed variation on one generated dataset does not measure uncertainty across different datasets or real environments.
 
-In the controlled edge-case stress test, **34 clearly labelled events** were scored and **17 ambiguous events** were reviewed separately. Event-level F1 / recall were: Isolation Forest **0.4516 / 0.2917** (7 TP, 17 FN, 0 FP); rule baseline **0.5455 / 0.3750** (9 TP, 15 FN, 0 FP); hybrid (ML OR rules) **0.6667 / 0.5000** (12 TP, 12 FN, 0 FP). Event-level results show that even the hybrid missed half of the clearly labelled positive events in this small stress set.
+In the controlled edge-case stress test, the hybrid (ML OR rules) reached event-level **F1 0.7027 / recall 0.5417** (13 TP, 11 FN, 0 FP); Isolation Forest reached **F1 0.6286 / recall 0.4583** (11 TP, 13 FN, 0 FP); and the rule baseline reached **F1 0.5455 / recall 0.3750** (9 TP, 15 FN, 0 FP). There were 24 clearly anomaly-labelled events and 10 clearly benign-labelled events; 17 ambiguous events were assessed separately and excluded from binary event metrics.
 
-At scenario level, the stress set contained six labelled anomaly scenarios and five benign scenarios. The rule baseline and hybrid detected all six labelled anomaly scenarios and raised no alerts on the five benign scenarios; Isolation Forest detected four of six anomaly scenarios. A scenario counts as detected if **at least one event** in it triggers an alert, so scenario-level recall can be much higher than event-level recall.
+At scenario level, the rule baseline and hybrid detected all six labelled anomaly scenarios and raised no alerts on the five benign scenarios; Isolation Forest detected four of six anomaly scenarios. A scenario counts as detected if at least one event in it triggers an alert, so scenario-level recall can be higher than event-level recall.
 
-The synthetic label/rule alignment audit reported F1 **0.9613** for the combined risk score threshold (score >= 3), with precision **0.9355**, recall **0.9886**, and false-positive rate **0.0040**. The password-spray rule had no true positives in the primary 1,588-row dataset; the controlled stress set separately tests cross-account spraying. This is a useful clue that the primary generator does not adequately exercise every implemented detection signal.
+The label/rule alignment audit reported **F1 0.5892** for the combined risk-score threshold (score >= 3), with precision **0.4383**, recall **0.8987**, and false-positive rate **0.0607**. The password-spray signal had no true positives in the primary dataset, so that pattern still needs stronger coverage in the main generator; it is separately represented in the controlled stress set.
 
-**Interpretation:** these are engineering diagnostics on synthetic, deliberately designed data—not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. The strong rule-baseline result should be treated cautiously until evaluated on an independent, labelled dataset. See the [full evaluation guide](docs/evaluation-guide.md) and the generated `reports/evaluation_report.md` for metric interpretation.
-
+**Interpretation:** these are engineering diagnostics on synthetic, deliberately designed data—not a real-world benchmark. The updated dataset includes more overlap between benign and anomaly contexts, but it remains small and generated by known rules. The results should not be presented as production detection performance. Review `reports/evaluation_report.md` after each run and preserve the run's dataset version and metrics together.
 ## Project Documentation
 
 - [Architecture and component flow](docs/architecture.md)
