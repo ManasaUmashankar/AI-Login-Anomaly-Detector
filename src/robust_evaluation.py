@@ -49,7 +49,7 @@ def _single_field(train, test, field):
 
 
 def evaluate(seed, df, train_fraction=0.4, windows=4):
-    clean = preprocess_logs(df.copy()).sort_values("timestamp", kind="stable").reset_index(drop=True)
+    clean = preprocess_logs(df.copy(), verbose=False).sort_values("timestamp", kind="stable").reset_index(drop=True)
     clean["true_label"] = clean["true_label"].astype(str).str.lower()
     features = build_features(clean)
     timestamps = features["timestamp"]
