@@ -11,9 +11,33 @@ from src.preprocessing import preprocess_logs
 from src.read_dataset import load_logs
 
 TRIVIAL_FIELDS = ["device", "ip_address", "location", "user_agent", "login_status"]
+SUMMARY_METRICS = ("precision", "recall", "f1", "pr_auc")
+
 
 def _metrics(y, pred):
     return {"precision": precision_score(y, pred, zero_division=0), "recall": recall_score(y, pred, zero_division=0), "f1": f1_score(y, pred, zero_division=0)}
+
+
+def summarize_seed_metrics(per_seed):
+    """Summarize seed-level metrics with flat, unique CSV column names.
+
+    Explicit named aggregation avoids pandas MultiIndex headers that create
+    repeated metric names and a second header row when exported to CSV.
+    """
+    required = {"method", *SUMMARY_METRICS}
+    missing = required.difference(per_seed.columns)
+    if missing:
+        raise ValueError(f"Missing columns required for robust summary: {sorted(missing)}")
+
+    aggregations = {}
+    for metric in SUMMARY_METRICS:
+        aggregations[f"{metric}_mean"] = (metric, "mean")
+        aggregations[f"{metric}_std"] = (metric, "std")
+    summary = per_seed.groupby("method").agg(**aggregations).round(4)
+    if not summary.columns.is_unique:
+        raise ValueError("Robust evaluation summary contains duplicate column names.")
+    return summary
+
 
 def _single_field(train, test, field):
     # Smoothed train-only category anomaly rate; no holdout labels used to choose categories.
@@ -22,6 +46,7 @@ def _single_field(train, test, field):
     rates = (counts["anomalies"] + 1) / (counts["n"] + 2)
     threshold = float((train["true_label"] == "anomaly").mean())
     return test[field].map(rates).fillna(threshold).ge(threshold).astype(int)
+
 
 def evaluate(seed, df, train_fraction=0.4, windows=4):
     clean = preprocess_logs(df.copy()).sort_values("timestamp", kind="stable").reset_index(drop=True)
@@ -37,8 +62,10 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         end_time = unique_times[boundaries[w+1]] if boundaries[w+1] < len(unique_times) else None
         train = features[features["timestamp"] < start_time].copy()
         test = features[features["timestamp"] >= start_time].copy()
-        if end_time is not None: test = test[test["timestamp"] < end_time].copy()
-        if train.empty or test.empty or test["true_label"].nunique() < 2: continue
+        if end_time is not None:
+            test = test[test["timestamp"] < end_time].copy()
+        if train.empty or test.empty or test["true_label"].nunique() < 2:
+            continue
         y = (test["true_label"] == "anomaly").astype(int)
         model = train_model(train, seed=seed, contamination="auto")
         score = -model.score_samples(test[MODEL_FEATURES])
@@ -46,15 +73,22 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         rule_result = apply_risk_scores(apply_rules(test.copy()))
         rules = (rule_result["risk_score"] >= 3).astype(int)
         hybrid = ((ml == 1) | (rules.to_numpy() == 1)).astype(int)
-        methods = {"single_field_device": _single_field(train, test, "device"), "single_field_ip": _single_field(train, test, "ip_address"), "single_field_location": _single_field(train, test, "location"), "single_field_user_agent": _single_field(train, test, "user_agent"), "single_field_status": _single_field(train, test, "login_status"), "rules_only": rules, "ml_only": ml, "hybrid": hybrid}
+        methods = {
+            "single_field_device": _single_field(train, test, "device"),
+            "single_field_ip": _single_field(train, test, "ip_address"),
+            "single_field_location": _single_field(train, test, "location"),
+            "single_field_user_agent": _single_field(train, test, "user_agent"),
+            "single_field_status": _single_field(train, test, "login_status"),
+            "rules_only": rules, "ml_only": ml, "hybrid": hybrid,
+        }
         for contamination in (0.01, 0.03, 0.05, 0.10):
             sweep_model = train_model(train, seed=seed, contamination=contamination)
             methods[f"ml_contamination_{contamination:.2f}"] = (sweep_model.predict(test[MODEL_FEATURES]) == -1).astype(int)
         for method, pred in methods.items():
             m = _metrics(y, pred)
-            row = {"seed": seed, "window": w + 1, "method": method, **m, "pr_auc": float(average_precision_score(y, score)) if method == "ml_only" else np.nan}
+            row = {"seed": seed, "window": w + 1, "method": method, **m,
+                   "pr_auc": float(average_precision_score(y, score)) if method == "ml_only" else np.nan}
             out.append(row)
-        # Keep attack and benign scenarios; exclude ambiguous labels rather than guessing.
         if "scenario_id" in test:
             for method, pred in methods.items():
                 temp = test[["scenario_id", "timestamp", "true_label"]].copy()
@@ -65,8 +99,16 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
                     benign = grp[grp["true_label"] == "normal"]
                     hit = attack[attack["pred"] == 1]
                     false_alert = benign[benign["pred"] == 1]
-                    out.append({"seed": seed, "window": w + 1, "method": method, "metric_type": "scenario", "scenario_id": sid, "scenario_label": "attack" if not attack.empty else "benign", "scenario_detected": int(not hit.empty) if not attack.empty else np.nan, "scenario_false_positive": int(not false_alert.empty) if attack.empty else np.nan, "time_to_detect_seconds": float((hit["timestamp"].min() - attack["timestamp"].min()).total_seconds()) if not hit.empty else np.nan})
+                    out.append({
+                        "seed": seed, "window": w + 1, "method": method,
+                        "metric_type": "scenario", "scenario_id": sid,
+                        "scenario_label": "attack" if not attack.empty else "benign",
+                        "scenario_detected": int(not hit.empty) if not attack.empty else np.nan,
+                        "scenario_false_positive": int(not false_alert.empty) if attack.empty else np.nan,
+                        "time_to_detect_seconds": float((hit["timestamp"].min() - attack["timestamp"].min()).total_seconds()) if not hit.empty else np.nan,
+                    })
     return pd.DataFrame(out)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -77,21 +119,29 @@ def main():
     data = load_logs(include_labels=True)
     all_runs = pd.concat([evaluate(seed, data, windows=args.windows) for seed in range(args.seeds)], ignore_index=True)
     event = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)).isna()]
-    # First average chronological windows within each seed, then summarize the 20 seed-level values.
-    per_seed = event.groupby(["seed", "method"])[["precision", "recall", "f1", "pr_auc"]].mean().reset_index()
-    summary = per_seed.groupby("method")[["precision", "recall", "f1", "pr_auc"]].agg(["mean", "std"]).round(4)
-    output = Path(args.output); output.parent.mkdir(parents=True, exist_ok=True)
+    # First average chronological windows within each seed, then summarize the seed-level values.
+    per_seed = event.groupby(["seed", "method"])[list(SUMMARY_METRICS)].mean().reset_index()
+    summary = summarize_seed_metrics(per_seed)
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
     all_runs.to_csv(output, index=False)
-    summary.to_csv(output.with_name(output.stem + "-summary.csv"))
-    print(summary.to_string()); print(f"\nFull per-seed results: {output}")
+    summary.to_csv(output.with_name(output.stem + "-summary.csv"), index_label="method")
+    print(summary.to_string())
+    print(f"\nFull per-seed results: {output}")
     scenarios = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)) == "scenario"]
     if not scenarios.empty:
         attacks = scenarios[scenarios["scenario_label"] == "attack"]
         benign = scenarios[scenarios["scenario_label"] == "benign"]
         print("\nScenario-level attack detection rate / time-to-detect:")
         if not attacks.empty:
-            print(attacks.groupby("method").agg(detection_rate=("scenario_detected", "mean"), mean_time_to_detect_seconds=("time_to_detect_seconds", "mean")).round(3).to_string())
+            print(attacks.groupby("method").agg(
+                detection_rate=("scenario_detected", "mean"),
+                mean_time_to_detect_seconds=("time_to_detect_seconds", "mean"),
+            ).round(3).to_string())
         print("\nBenign scenario false-positive rate:")
         if not benign.empty:
             print(benign.groupby("method")["scenario_false_positive"].mean().round(3).to_string())
-if __name__ == "__main__": main()
+
+
+if __name__ == "__main__":
+    main()
