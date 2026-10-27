@@ -233,7 +233,7 @@ def make_rapid_rows(name):
                 name,
                 ip,
                 place,
-                "Unknown Device",
+                device,
                 "success",
                 0,
                 label="anomaly",
