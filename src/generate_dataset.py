@@ -48,6 +48,8 @@ USER_AGENTS = {
     "MacBook": "Safari on Mac",
     "Android Phone": "Chrome on Android",
     "Unknown Device": "python-requests",
+    "iPhone": "Safari on iOS",
+    "Linux Laptop": "Firefox on Linux",
 }
 
 # Reserved example IPs and fictional suspicious locations
@@ -61,6 +63,13 @@ BAD_PLACES = [
     "Moscow, Russia",
     "Lagos, Nigeria",
     "Sao Paulo, Brazil",
+]
+
+# Benign context variation prevents one categorical field from revealing labels.
+BENIGN_CONTEXTS = [
+    ("198.51.100.140", "Bengaluru, India", "iPhone"),
+    ("203.0.113.88", "Pune, India", "Linux Laptop"),
+    ("192.0.2.140", "Mumbai, India", "Windows Laptop"),
 ]
 
 
@@ -110,6 +119,12 @@ def make_normal_rows(count):
 
         time = random_time(user["start"], user["end"])
 
+        # Some legitimate logins use a new device, VPN-like address, or travel context.
+        # These are benign by ground truth; novelty alone is not proof of an attack.
+        ip, location, device = user["ip"], user["location"], user["device"]
+        if random.random() < 0.06:
+            ip, location, device = random.choice(BENIGN_CONTEXTS)
+
         if random.random() < 0.05:
             status, failed = "failed", 1
         else:
@@ -119,9 +134,9 @@ def make_normal_rows(count):
             make_row(
                 time,
                 name,
-                user["ip"],
-                user["location"],
-                user["device"],
+                ip,
+                location,
+                device,
                 status,
                 failed,
                 label="normal",
@@ -134,8 +149,13 @@ def make_normal_rows(count):
 def make_brute_force_rows(name, ends_in_success):
     """Generate repeated failed logins, optionally followed by success."""
     time = random_time(0, 23)
-    ip = random.choice(BAD_IPS)
-    place = random.choice(BAD_PLACES)
+    # Some attacks reuse a familiar context, so device/IP/location are not
+    # individually sufficient to determine the ground-truth label.
+    if random.random() < 0.25:
+        user = USERS[name]
+        ip, place, device = user["ip"], user["location"], user["device"]
+    else:
+        ip, place, device = random.choice(BAD_IPS), random.choice(BAD_PLACES), "Unknown Device"
     tries = random.randint(6, 12)
 
     rows = []
@@ -147,7 +167,7 @@ def make_brute_force_rows(name, ends_in_success):
                 name,
                 ip,
                 place,
-                "Unknown Device",
+                device,
                 "failed",
                 number,
                 label="anomaly",
@@ -163,7 +183,7 @@ def make_brute_force_rows(name, ends_in_success):
                 name,
                 ip,
                 place,
-                "Unknown Device",
+                device,
                 "success",
                 tries,
                 label="anomaly",
@@ -177,12 +197,18 @@ def make_odd_login_row(name):
     """Generate a successful login at an unusual hour from a new location."""
     time = random_time(1, 4)
 
+    if random.random() < 0.35:
+        user = USERS[name]
+        ip, place, device = user["ip"], user["location"], user["device"]
+    else:
+        ip, place, device = random.choice(BAD_IPS), random.choice(BAD_PLACES), "Unknown Device"
+
     return make_row(
         time,
         name,
-        random.choice(BAD_IPS),
-        random.choice(BAD_PLACES),
-        "Unknown Device",
+        ip,
+        place,
+        device,
         "success",
         0,
         label="anomaly",
@@ -192,8 +218,11 @@ def make_odd_login_row(name):
 def make_rapid_rows(name):
     """Generate a burst of suspicious logins ten seconds apart."""
     time = random_time(0, 23)
-    ip = random.choice(BAD_IPS)
-    place = random.choice(BAD_PLACES)
+    if random.random() < 0.25:
+        user = USERS[name]
+        ip, place, device = user["ip"], user["location"], user["device"]
+    else:
+        ip, place, device = random.choice(BAD_IPS), random.choice(BAD_PLACES), "Unknown Device"
 
     rows = []
 
