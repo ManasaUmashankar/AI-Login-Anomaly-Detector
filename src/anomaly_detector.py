@@ -29,8 +29,20 @@ FINAL_COLUMNS = [
 ]
 
 
-def train_model(features_df, seed=RANDOM_STATE, contamination=CONTAMINATION):
-    """Teach the model what the data looks like (no labels used)."""
+def train_model(
+    features_df,
+    seed=RANDOM_STATE,
+    contamination=CONTAMINATION,
+    random_state=None,
+):
+    """Train Isolation Forest without using labels.
+
+    seed is retained for evaluation scripts. random_state is accepted as an
+    explicit alias for callers using scikit-learn terminology.
+    """
+    if random_state is not None:
+        seed = random_state
+
     model = IsolationForest(
         n_estimators=N_TREES,
         contamination=contamination,
