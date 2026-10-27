@@ -70,6 +70,10 @@ BENIGN_CONTEXTS = [
     ("198.51.100.140", "Bengaluru, India", "iPhone"),
     ("203.0.113.88", "Pune, India", "Linux Laptop"),
     ("192.0.2.140", "Mumbai, India", "Windows Laptop"),
+    # Legitimate travel can overlap geographically with suspicious scenarios.
+    ("198.51.100.141", "Moscow, Russia", "Windows Laptop"),
+    ("203.0.113.89", "Lagos, Nigeria", "MacBook"),
+    ("192.0.2.141", "Sao Paulo, Brazil", "Android Phone"),
 ]
 
 
