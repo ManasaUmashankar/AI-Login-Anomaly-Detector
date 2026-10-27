@@ -1,4 +1,4 @@
-"""Run synthetic-data audits and detector comparisons into reproducible reports."""
+""""Run synthetic-data audits and detector comparisons into reproducible reports."""
 from pathlib import Path
 import pandas as pd
 
@@ -9,6 +9,9 @@ from src.stress_test_evaluation import evaluate_scenario_detection, evaluate_str
 
 METRICS = ("precision", "recall", "f1", "false_positive_rate", "accuracy")
 DEFAULT_REPORT_DIR = Path(__file__).resolve().parents[1] / "reports"
+OVERVIEW_COLUMNS = (
+    "evaluation_scope", "detector", "metric", "mean", "std", "tp", "fp", "fn", "tn",
+)
 
 
 def _metric_rows(scope, detector_metrics):
@@ -113,6 +116,21 @@ def _write_markdown_report(path, df, audit, overview):
     path.write_text("\n".join(content), encoding="utf-8")
 
 
+def validate_overview_schema(frame):
+    """Reject duplicate or unexpected columns before writing the evaluation CSV."""
+    if not frame.columns.is_unique:
+        duplicates = frame.columns[frame.columns.duplicated()].tolist()
+        raise ValueError(f"Evaluation summary contains duplicate column names: {duplicates}")
+    missing = set(OVERVIEW_COLUMNS).difference(frame.columns)
+    unexpected = set(frame.columns).difference(OVERVIEW_COLUMNS)
+    if missing or unexpected:
+        raise ValueError(
+            f"Invalid evaluation summary schema; missing={sorted(missing)}, "
+            f"unexpected={sorted(unexpected)}"
+        )
+    return frame
+
+
 def run_evaluation_suite(df=None, seeds=range(20), train_fraction=0.40, windows=4, report_dir=None):
     """Run all audits/evaluations and write machine-readable CSV plus a Markdown report."""
     if df is None:
@@ -136,8 +154,7 @@ def run_evaluation_suite(df=None, seeds=range(20), train_fraction=0.40, windows=
             seed_rows.append({"detector": detector, "metric": metric, "mean": values["mean"], "std": values["std"]})
         for seed, window_results in seed_result["runs"].items():
             for window in window_results:
-                metric_key = key
-                values = window[metric_key]
+                values = window[key]
                 temporal_rows.append({
                     "seed": seed, "window": window["window"], "detector": detector,
                     "train_rows": window["metadata"]["train_rows"],
@@ -166,7 +183,7 @@ def run_evaluation_suite(df=None, seeds=range(20), train_fraction=0.40, windows=
     pd.DataFrame(event_metric_rows).to_csv(out_dir / "stress_event_metrics.csv", index=False)
     pd.DataFrame(scenario_metric_rows).to_csv(out_dir / "stress_scenario_metrics.csv", index=False)
 
-    overview = pd.DataFrame(build_overview_rows(seed_result, stress_summary, scenario_metrics))
+    overview = validate_overview_schema(pd.DataFrame(build_overview_rows(seed_result, stress_summary, scenario_metrics), columns=OVERVIEW_COLUMNS))
     overview.to_csv(out_dir / "evaluation_summary.csv", index=False)
     _write_markdown_report(out_dir / "evaluation_report.md", df, audit, overview)
 
