@@ -176,7 +176,7 @@ def evaluate_stress_test(history=None):
     historical = history.copy()
     historical["timestamp"] = pd.to_datetime(historical["timestamp"], errors="coerce")
     historical = historical.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
-    historical = preprocess_logs(historical)
+    historical = preprocess_logs(historical, verbose=False)
     historical_features = build_features(historical)
 
     stress = build_stress_scenarios(historical_features)

@@ -123,7 +123,7 @@ data/login_logs.csv
 
 The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users. The random seed is fixed, so the data is identical on every run.
+`src/generate_dataset.py` creates `data/login_logs.csv` with **1,579 records** over 30 days for four users in the current generator version. The fixed random seed makes generation reproducible. The dataset contains **1,500 normal rows and 79 anomaly-labelled rows** (about 5% anomalies).
 
 | Column | Meaning |
 |---|---|
@@ -137,13 +137,9 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | `user_agent` | Browser or program identifier |
 | `session_id` | Unique ID for the attempt |
 
-**Normal behaviour (1,500 records):** familiar IP, device, and location, working hours, mostly successful logins, with an occasional typo.
+**Normal behaviour (1,500 records):** mostly familiar context and working-hour logins, with occasional failed attempts. A small share of benign logins deliberately use a changed IP/device context to ensure novelty alone does not define the label.
 
-**Suspicious behaviour planted (88 records):**
-
-- 5 brute-force-style runs (6 to 12 fast failures, 3 of them ending in a success)
-- 8 unusual logins (new IP, new device, foreign location, 1 to 4 AM)
-- 4 rapid-login bursts (6 logins in about a minute)
+**Anomaly-labelled behaviour (79 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
 
 ## Detection Methodology
 
@@ -241,6 +237,7 @@ AI-Login-Anomaly-Detector/
 │   ├── evaluate_model.py       # temporal holdout and multi-seed evaluation
 │   ├── audit_label_alignment.py # audits rule/label overlap
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
+│   ├── evaluation_suite.py       # combines audits and evaluation reports
 │   └── utils.py                 # shared file paths
 ├── models/
 │   └── anomaly_model_v3.pkl
@@ -279,7 +276,8 @@ python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
 python -m src.evaluate_model                # 4. run 20-seed chronological evaluation
 python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
-python -m streamlit run dashboard/app.py   # 6. open the dashboard
+python -m src.evaluation_suite              # 6. write combined CSV and Markdown reports
+python -m streamlit run dashboard/app.py   # 7. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
@@ -336,10 +334,25 @@ The model is fitted only on rows earlier than each holdout window; ground-truth 
 
 ## Latest Evaluation Snapshot
 
-Historical baseline snapshot (2026-10-21; before the multi-seed evaluation was added): across four chronological holdout windows, Isolation Forest achieved an unweighted mean F1-score of **0.9583** and recall of **0.9286**; the rule-based risk-score baseline achieved mean F1 of **0.9947** and recall of **1.0000**. In the separate controlled stress test, the hybrid detector achieved event-level F1 of **0.667** and recall of **0.500** across 34 clearly labelled events; 17 ambiguous events were reviewed separately. These figures are historical and have **not** been reproduced with the new 20-seed evaluator. Do not present them as the new evaluator's results.
+Evaluation run on **2026-10-27** after regenerating the current 1,579-row synthetic dataset (1,500 normal; 79 anomaly-labelled rows). The 20-seed chronological evaluation uses four holdout windows per seed.
 
-These are results on synthetic, deliberately designed data, not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. Run the evaluator and update this section only after the new results have been produced and reviewed. See the [full evaluation guide](docs/evaluation-guide.md) for metric interpretation.
+| Metric | Isolation Forest | Rule baseline |
+|---|---:|---:|
+| Mean F1-score | 0.7782 | 0.4813 |
+| Mean precision | 0.7421 | 0.3596 |
+| Mean recall | 0.8952 | 0.9306 |
+| Mean false-positive rate | 0.0078 | 0.0641 |
+| Mean accuracy | 0.9873 | 0.9335 |
 
+Isolation Forest F1 standard deviation was **0.0240**; the rule baseline is deterministic on this dataset. These are averages across seed-level chronological-window metrics, not pooled metrics. Seed variation on one generated dataset does not measure uncertainty across different datasets or real environments.
+
+In the controlled edge-case stress test, the hybrid (ML OR rules) reached event-level **F1 0.7027 / recall 0.5417** (13 TP, 11 FN, 0 FP); Isolation Forest reached **F1 0.6286 / recall 0.4583** (11 TP, 13 FN, 0 FP); and the rule baseline reached **F1 0.5455 / recall 0.3750** (9 TP, 15 FN, 0 FP). There were 24 clearly anomaly-labelled events and 10 clearly benign-labelled events; 17 ambiguous events were assessed separately and excluded from binary event metrics.
+
+At scenario level, the rule baseline and hybrid detected all six labelled anomaly scenarios and raised no alerts on the five benign scenarios; Isolation Forest detected four of six anomaly scenarios. A scenario counts as detected if at least one event in it triggers an alert, so scenario-level recall can be higher than event-level recall.
+
+The label/rule alignment audit reported **F1 0.5892** for the combined risk-score threshold (score >= 3), with precision **0.4383**, recall **0.8987**, and false-positive rate **0.0607**. The password-spray signal had no true positives in the primary dataset, so that pattern still needs stronger coverage in the main generator; it is separately represented in the controlled stress set.
+
+**Interpretation:** these are engineering diagnostics on synthetic, deliberately designed data—not a real-world benchmark. The updated dataset includes more overlap between benign and anomaly contexts, but it remains small and generated by known rules. The results should not be presented as production detection performance. Review `reports/evaluation_report.md` after each run and preserve the run's dataset version and metrics together.
 ## Project Documentation
 
 - [Architecture and component flow](docs/architecture.md)
@@ -354,6 +367,12 @@ python -m pytest -v
 ```
 
 The tests use small hand-made logs with known correct answers, plus checks on the full pipeline. They cover dataset loading, preprocessing, feature generation, detection rules, risk scoring, ML output, normal cases, and suspicious cases.
+
+## Combined Evaluation Suite
+
+Run `python -m src.evaluation_suite` to execute the label/rule alignment audit, 20-seed chronological evaluation, and controlled stress test in one reproducible command. It compares Isolation Forest, the rule baseline, and a diagnostic hybrid on the stress cases, with both event-level and scenario-level metrics. Ambiguous stress cases remain separately reported rather than being silently treated as benign or malicious.
+
+The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. Inspect the label-alignment results for overlap between the synthetic label-generation patterns and the detector rules. The report intentionally does not overwrite the headline metrics in this README: review the output and update any published metric snapshot only after confirming what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
 
 ## Limitations
 
