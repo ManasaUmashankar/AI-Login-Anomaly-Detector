@@ -193,6 +193,12 @@ def add_failed_users_per_ip_window(df):
 def build_features(df):
     """Add all model features using strictly historical, timestamp-safe baselines."""
     df = df.copy()
+    # Pandas Arrow-backed strings can make repeated scalar comparisons inside
+    # timestamp batches disproportionately expensive. Convert the small set
+    # of categorical inputs once, rather than paying that conversion per batch.
+    for column in ("username", "ip_address", "device", "location", "login_status"):
+        if column in df.columns:
+            df[column] = df[column].astype(object)
     df = df.sort_values("timestamp", kind="stable").reset_index(drop=True)
     df = add_time_features(df)
     df = add_difference_from_usual(df, "ip_address", "is_new_ip")
