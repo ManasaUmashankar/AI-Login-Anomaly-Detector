@@ -51,7 +51,11 @@ def _supervised_category_prior(train, test, field):
     labels = train["true_label"].astype(str).str.strip().str.lower()
     if not labels.isin(["normal", "anomaly"]).all():
         raise ValueError("Training true_label must contain only normal/anomaly.")
-    training = train[[field]].copy()\n    training["true_label"] = labels.to_numpy()\n    counts = training.groupby(field)["true_label"].agg(["count", lambda s: (s == "anomaly").sum()])
+    training = train[[field]].copy()
+    training["true_label"] = labels.to_numpy()
+    counts = training.groupby(field)["true_label"].agg(
+        ["count", lambda s: (s == "anomaly").sum()]
+    )
     counts.columns = ["n", "anomalies"]
     rates = (counts["anomalies"] + 1) / (counts["n"] + 2)
     threshold = float(labels.eq("anomaly").mean())
