@@ -102,7 +102,7 @@ def preprocess_logs(df, verbose=True):
     if verbose:
         print("----- PREPROCESSING SUMMARY -----")
         print(f"Rows at start:                {rows_at_start}")
-        print(f"Missing values found (filled): {missing_found}")
+        print(f"Missing cells detected before cleaning: {missing_found}")
         print(f"Duplicate rows removed:       {duplicates}")
         print(f"Invalid timestamps removed:   {bad_timestamps}")
         print(f"Invalid values removed:       {bad_values}")
