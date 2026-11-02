@@ -59,7 +59,7 @@ def _supervised_category_prior(train, test, field):
     counts.columns = ["n", "anomalies"]
     rates = (counts["anomalies"] + 1) / (counts["n"] + 2)
     threshold = float(labels.eq("anomaly").mean())
-    return test[field].map(rates).fillna(threshold).ge(threshold).astype(int)
+    return test[field].map(rates).fillna(0.0).gt(threshold).astype(int)
 
 
 def evaluate(seed, df, train_fraction=0.4, windows=4):
