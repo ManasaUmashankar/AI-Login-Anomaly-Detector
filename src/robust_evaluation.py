@@ -10,7 +10,7 @@ from src.feature_engineering import build_features
 from src.preprocessing import preprocess_logs
 from src.read_dataset import load_logs
 
-TRIVIAL_FIELDS = ["device", "ip_address", "location", "user_agent", "login_status"]
+CATEGORY_PRIOR_FIELDS = ["device", "ip_address", "location", "user_agent", "login_status"]
 SUMMARY_METRICS = ("precision", "recall", "f1", "pr_auc")
 
 
@@ -39,12 +39,22 @@ def summarize_seed_metrics(per_seed):
     return summary
 
 
-def _single_field(train, test, field):
-    # Smoothed train-only category anomaly rate; no holdout labels used to choose categories.
-    counts = train.groupby(field)["true_label"].agg(["count", lambda s: (s == "anomaly").sum()])
+def _supervised_category_prior(train, test, field):
+    """One-field supervised baseline using training labels only.
+
+    This is not an unsupervised anomaly detector: category anomaly rates are
+    estimated from labelled training rows. Holdout labels are never consulted.
+    """
+    required = {field, "true_label"}
+    if not required.issubset(train.columns) or field not in test.columns:
+        raise ValueError(f"Training and test data must contain {field!r}; training data must contain true_label.")
+    labels = train["true_label"].astype(str).str.strip().str.lower()
+    if not labels.isin(["normal", "anomaly"]).all():
+        raise ValueError("Training true_label must contain only normal/anomaly.")
+    training = train[[field]].copy()\n    training["true_label"] = labels.to_numpy()\n    counts = training.groupby(field)["true_label"].agg(["count", lambda s: (s == "anomaly").sum()])
     counts.columns = ["n", "anomalies"]
     rates = (counts["anomalies"] + 1) / (counts["n"] + 2)
-    threshold = float((train["true_label"] == "anomaly").mean())
+    threshold = float(labels.eq("anomaly").mean())
     return test[field].map(rates).fillna(threshold).ge(threshold).astype(int)
 
 
@@ -74,11 +84,11 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         rules = (rule_result["risk_score"] >= 3).astype(int)
         hybrid = ((ml == 1) | (rules.to_numpy() == 1)).astype(int)
         methods = {
-            "single_field_device": _single_field(train, test, "device"),
-            "single_field_ip": _single_field(train, test, "ip_address"),
-            "single_field_location": _single_field(train, test, "location"),
-            "single_field_user_agent": _single_field(train, test, "user_agent"),
-            "single_field_status": _single_field(train, test, "login_status"),
+            "supervised_category_prior_device": _supervised_category_prior(train, test, "device"),
+            "supervised_category_prior_ip": _supervised_category_prior(train, test, "ip_address"),
+            "supervised_category_prior_location": _supervised_category_prior(train, test, "location"),
+            "supervised_category_prior_user_agent": _supervised_category_prior(train, test, "user_agent"),
+            "supervised_category_prior_status": _supervised_category_prior(train, test, "login_status"),
             "rules_only": rules, "ml_only": ml, "hybrid": hybrid,
         }
         for contamination in (0.01, 0.03, 0.05, 0.10):
