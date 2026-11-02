@@ -32,3 +32,30 @@ def test_summary_rejects_missing_metric_columns():
 
     with pytest.raises(ValueError, match="Missing columns required"):
         summarize_seed_metrics(frame)
+
+
+def test_supervised_category_prior_uses_training_labels_only():
+    from src.robust_evaluation import _supervised_category_prior
+
+    train = pd.DataFrame({
+        "user_agent": ["known-bad", "known-bad", "ordinary", "ordinary"],
+        "true_label": ["anomaly", "anomaly", "normal", "normal"],
+    })
+    test = pd.DataFrame({"user_agent": ["known-bad", "ordinary", "unseen"]})
+
+    predictions = _supervised_category_prior(train, test, "user_agent")
+
+    assert predictions.tolist() == [1, 0, 0]
+    # Changing or adding holdout labels cannot affect predictions: they are not an input.
+    test_with_labels = test.assign(true_label=["normal", "anomaly", "anomaly"])
+    assert _supervised_category_prior(train, test_with_labels, "user_agent").tolist() == [1, 0, 0]
+
+
+def test_supervised_category_prior_rejects_unknown_training_labels():
+    from src.robust_evaluation import _supervised_category_prior
+
+    train = pd.DataFrame({"device": ["x"], "true_label": ["unknown"]})
+    test = pd.DataFrame({"device": ["x"]})
+
+    with pytest.raises(ValueError, match="normal/anomaly"):
+        _supervised_category_prior(train, test, "device")
