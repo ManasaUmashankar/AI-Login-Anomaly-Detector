@@ -332,11 +332,13 @@ Run `python -m src.evaluate_model` to perform a **20-seed temporal evaluation** 
 
 The separate `src/robust_evaluation.py` experiment also includes one-field category-prior baselines. These are **supervised baselines**, not unsupervised detectors: each estimates category anomaly rates from labelled training rows only, then applies those rates to later holdout rows. They are now named `supervised_category_prior_*` to make that distinction explicit. They must not be described as independent unsupervised anomaly detectors or compared without noting their access to training labels.
 
+Run the robustness experiment with `python -m src.robust_evaluation --seeds 20 --windows 4`. It writes per-window/per-seed results to `reports/robust-evaluation.csv`, the metric summary to `reports/robust-evaluation-summary.csv`, and explicit hybrid/ML/rule prediction-overlap diagnostics to `reports/robust-evaluation-overlap.csv` and `reports/robust-evaluation-overlap-summary.csv`. The overlap report counts rule-only alerts added by the hybrid, ML-only alerts, shared alerts, and windows where both prediction arrays are identical. This distinguishes genuinely redundant rule alerts from coincidentally similar aggregate metrics.
+
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
-## Latest Evaluation Snapshot
+## Historical Evaluation Snapshot (2026-10-27)
 
-Evaluation run on **2026-10-27** after regenerating the current 1,579-row synthetic dataset (1,500 normal; 79 anomaly-labelled rows). The 20-seed chronological evaluation uses four holdout windows per seed.
+The following figures are retained as a historical record only. They were produced from an earlier 1,579-row dataset (1,500 normal; 79 anomaly-labelled rows) and do not describe the currently restored 1,588-row dataset. Do not use these values as the current project metrics. Regenerate and review `reports/evaluation_report.md` and the robustness reports before publishing a new snapshot.
 
 | Metric | Isolation Forest | Rule baseline |
 |---|---:|---:|
