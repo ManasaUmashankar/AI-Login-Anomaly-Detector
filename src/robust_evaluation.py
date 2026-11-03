@@ -95,10 +95,23 @@ def hybrid_overlap_diagnostics(ml_predictions, rule_predictions):
     }
 
 
-def evaluate(seed, df, train_fraction=0.4, windows=4):
-    clean = preprocess_logs(df.copy(), verbose=False).sort_values("timestamp", kind="stable").reset_index(drop=True)
+def prepare_evaluation_features(df):
+    """Preprocess and engineer features once for reuse across random seeds."""
+    clean = preprocess_logs(df.copy(), verbose=False)
+    clean = clean.sort_values("timestamp", kind="stable").reset_index(drop=True)
     clean["true_label"] = clean["true_label"].astype(str).str.lower()
-    features = build_features(clean)
+    return build_features(clean)
+
+
+def evaluate(seed, df, train_fraction=0.4, windows=4, prepared_features=None):
+    # Feature values depend on event history, not the model random seed. Reuse
+    # one prepared frame across seeds instead of repeating the expensive history
+    # calculations twenty times in the default evaluation.
+    features = (
+        prepare_evaluation_features(df)
+        if prepared_features is None
+        else prepared_features
+    )
     timestamps = features["timestamp"]
     unique_times = timestamps.drop_duplicates().tolist()
     first = max(2, int(len(unique_times) * train_fraction))
@@ -179,7 +192,14 @@ def main():
     parser.add_argument("--output", default="reports/robust-evaluation.csv")
     args = parser.parse_args()
     data = load_logs(include_labels=True)
-    all_runs = pd.concat([evaluate(seed, data, windows=args.windows) for seed in range(args.seeds)], ignore_index=True)
+    features = prepare_evaluation_features(data)
+    all_runs = pd.concat(
+        [
+            evaluate(seed, data, windows=args.windows, prepared_features=features)
+            for seed in range(args.seeds)
+        ],
+        ignore_index=True,
+    )
     event = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)).isna()]
     # First average chronological windows within each seed, then summarize the seed-level values.
     per_seed = event.groupby(["seed", "method"])[list(SUMMARY_METRICS)].mean().reset_index()
