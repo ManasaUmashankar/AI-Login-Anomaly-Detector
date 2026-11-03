@@ -52,7 +52,7 @@ def audit_label_alignment(df, risk_threshold=3):
     if not working["true_label"].isin(["normal", "anomaly"]).all():
         raise ValueError("true_label must contain only 'normal' and 'anomaly'.")
 
-    cleaned = preprocess_logs(working)
+    cleaned = preprocess_logs(working, verbose=False)
     features = build_features(cleaned)
     actual = features["true_label"].reset_index(drop=True)
     risk = apply_risk_scores(apply_rules(features.copy()))

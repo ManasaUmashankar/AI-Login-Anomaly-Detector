@@ -29,17 +29,18 @@ FINAL_COLUMNS = [
 ]
 
 
-def train_model(features_df, random_state=RANDOM_STATE):
-    """Teach the model what the data looks like (no labels used).
+def train_model(features_df, seed=RANDOM_STATE, contamination=CONTAMINATION, random_state=None):
+    """Fit Isolation Forest with backward-compatible seed/contamination controls.
 
-    random_state can be varied during evaluation to measure sensitivity to
-    Isolation Forest randomness. Production/pipeline training stays deterministic
-    by default.
+    Existing callers may pass random_state; evaluation callers may pass seed and
+    contamination. The default remains deterministic for the normal pipeline.
     """
+    if random_state is not None:
+        seed = random_state
     model = IsolationForest(
         n_estimators=N_TREES,
-        contamination=CONTAMINATION,
-        random_state=random_state,
+        contamination=contamination,
+        random_state=seed,
     )
     model.fit(features_df[MODEL_FEATURES])
     return model

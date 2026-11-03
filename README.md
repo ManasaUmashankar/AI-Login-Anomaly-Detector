@@ -123,7 +123,7 @@ data/login_logs.csv
 
 The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users. The random seed is fixed, so the data is identical on every run.
+`src/generate_dataset.py` creates `data/login_logs.csv` with **1,579 records** over 30 days for four users in the current generator version. The fixed random seed makes generation reproducible. The dataset contains **1,500 normal rows and 79 anomaly-labelled rows** (about 5% anomalies).
 
 | Column | Meaning |
 |---|---|
@@ -137,13 +137,9 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 | `user_agent` | Browser or program identifier |
 | `session_id` | Unique ID for the attempt |
 
-**Normal behaviour (1,500 records):** familiar IP, device, and location, working hours, mostly successful logins, with an occasional typo.
+**Normal behaviour (1,500 records):** mostly familiar context and working-hour logins, with occasional failed attempts. A small share of benign logins deliberately use a changed IP/device context to ensure novelty alone does not define the label.
 
-**Suspicious behaviour planted (88 records):**
-
-- 5 brute-force-style runs (6 to 12 fast failures, 3 of them ending in a success)
-- 8 unusual logins (new IP, new device, foreign location, 1 to 4 AM)
-- 4 rapid-login bursts (6 logins in about a minute)
+**Anomaly-labelled behaviour (79 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
 
 ## Detection Methodology
 
@@ -241,6 +237,7 @@ AI-Login-Anomaly-Detector/
 │   ├── evaluate_model.py       # temporal holdout and multi-seed evaluation
 │   ├── audit_label_alignment.py # audits rule/label overlap
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
+│   ├── evaluation_suite.py       # combines audits and evaluation reports
 │   └── utils.py                 # shared file paths
 ├── models/
 │   └── anomaly_model_v3.pkl
@@ -279,7 +276,8 @@ python -m src.read_dataset                 # 2. (optional) explore the data
 python -m src.anomaly_detector             # 3. train, save the model, run the full pipeline
 python -m src.evaluate_model                # 4. run 20-seed chronological evaluation
 python -m src.stress_test_evaluation        # 5. stress-test difficult synthetic edge cases
-python -m streamlit run dashboard/app.py   # 6. open the dashboard
+python -m src.evaluation_suite              # 6. write combined CSV and Markdown reports
+python -m streamlit run dashboard/app.py   # 7. open the dashboard
 ```
 
 Each stage can also be run on its own, for example `python -m src.preprocessing`, `python -m src.feature_engineering`, or `python -m src.detection_rules`.
@@ -332,14 +330,33 @@ The dataset contains planted synthetic scenarios. Performance on those scenarios
 
 Run `python -m src.evaluate_model` to perform a **20-seed temporal evaluation** across four chronological holdout windows per seed. Each seed keeps the same time-ordered splits but varies Isolation Forest's random state. The report summarizes mean and sample standard deviation of each metric across seed-level averages, compares Isolation Forest with the rule-based risk-score baseline (score >= 3), and prints detailed window metrics for seed 0 (the first seed in the default sweep). This measures sensitivity to model randomness; it does not measure uncertainty across different datasets or real environments.
 
+The separate `src/robust_evaluation.py` experiment also includes one-field category-prior baselines. These are **supervised baselines**, not unsupervised detectors: each estimates category anomaly rates from labelled training rows only, then applies those rates to later holdout rows. They are now named `supervised_category_prior_*` to make that distinction explicit. They must not be described as independent unsupervised anomaly detectors or compared without noting their access to training labels.
+
+Run the robustness experiment with `python -m src.robust_evaluation --seeds 20 --windows 4`. It writes per-window/per-seed results to `reports/robust-evaluation.csv`, the metric summary to `reports/robust-evaluation-summary.csv`, and explicit hybrid/ML/rule prediction-overlap diagnostics to `reports/robust-evaluation-overlap.csv` and `reports/robust-evaluation-overlap-summary.csv`. The overlap report counts rule-only alerts added by the hybrid, ML-only alerts, shared alerts, and windows where both prediction arrays are identical. This distinguishes genuinely redundant rule alerts from coincidentally similar aggregate metrics.
+
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
-## Latest Evaluation Snapshot
+## Historical Evaluation Snapshot (2026-10-27)
 
-Historical baseline snapshot (2026-10-21; before the multi-seed evaluation was added): across four chronological holdout windows, Isolation Forest achieved an unweighted mean F1-score of **0.9583** and recall of **0.9286**; the rule-based risk-score baseline achieved mean F1 of **0.9947** and recall of **1.0000**. In the separate controlled stress test, the hybrid detector achieved event-level F1 of **0.667** and recall of **0.500** across 34 clearly labelled events; 17 ambiguous events were reviewed separately. These figures are historical and have **not** been reproduced with the new 20-seed evaluator. Do not present them as the new evaluator's results.
+The following figures are retained as a historical record only. They were produced from an earlier 1,579-row dataset (1,500 normal; 79 anomaly-labelled rows) and do not describe the currently restored 1,588-row dataset. Do not use these values as the current project metrics. Regenerate and review `reports/evaluation_report.md` and the robustness reports before publishing a new snapshot.
 
-These are results on synthetic, deliberately designed data, not a real-world benchmark. The generator may encode signals also used by the detector, so high scores are not independent evidence of production effectiveness. Run the evaluator and update this section only after the new results have been produced and reviewed. See the [full evaluation guide](docs/evaluation-guide.md) for metric interpretation.
+| Metric | Isolation Forest | Rule baseline |
+|---|---:|---:|
+| Mean F1-score | 0.7782 | 0.4813 |
+| Mean precision | 0.7421 | 0.3596 |
+| Mean recall | 0.8952 | 0.9306 |
+| Mean false-positive rate | 0.0078 | 0.0641 |
+| Mean accuracy | 0.9873 | 0.9335 |
 
+Isolation Forest F1 standard deviation was **0.0240**; the rule baseline is deterministic on this dataset. These are averages across seed-level chronological-window metrics, not pooled metrics. Seed variation on one generated dataset does not measure uncertainty across different datasets or real environments.
+
+In the controlled edge-case stress test, the hybrid (ML OR rules) reached event-level **F1 0.7027 / recall 0.5417** (13 TP, 11 FN, 0 FP); Isolation Forest reached **F1 0.6286 / recall 0.4583** (11 TP, 13 FN, 0 FP); and the rule baseline reached **F1 0.5455 / recall 0.3750** (9 TP, 15 FN, 0 FP). There were 24 clearly anomaly-labelled events and 10 clearly benign-labelled events; 17 ambiguous events were assessed separately and excluded from binary event metrics.
+
+At scenario level, the rule baseline and hybrid detected all six labelled anomaly scenarios and raised no alerts on the five benign scenarios; Isolation Forest detected four of six anomaly scenarios. A scenario counts as detected if at least one event in it triggers an alert, so scenario-level recall can be higher than event-level recall.
+
+The label/rule alignment audit reported **F1 0.5892** for the combined risk-score threshold (score >= 3), with precision **0.4383**, recall **0.8987**, and false-positive rate **0.0607**. The password-spray signal had no true positives in the primary dataset, so that pattern still needs stronger coverage in the main generator; it is separately represented in the controlled stress set.
+
+**Interpretation:** these are engineering diagnostics on synthetic, deliberately designed data—not a real-world benchmark. The updated dataset includes more overlap between benign and anomaly contexts, but it remains small and generated by known rules. The results should not be presented as production detection performance. Review `reports/evaluation_report.md` after each run and preserve the run's dataset version and metrics together.
 ## Project Documentation
 
 - [Architecture and component flow](docs/architecture.md)
@@ -354,6 +371,12 @@ python -m pytest -v
 ```
 
 The tests use small hand-made logs with known correct answers, plus checks on the full pipeline. They cover dataset loading, preprocessing, feature generation, detection rules, risk scoring, ML output, normal cases, and suspicious cases.
+
+## Combined Evaluation Suite
+
+Run `python -m src.evaluation_suite` to execute the label/rule alignment audit, 20-seed chronological evaluation, and controlled stress test in one reproducible command. It compares Isolation Forest, the rule baseline, and a diagnostic hybrid on the stress cases, with both event-level and scenario-level metrics. Ambiguous stress cases remain separately reported rather than being silently treated as benign or malicious.
+
+The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. `temporal_window_metrics.csv` preserves seed, window, train/test row counts, chronological boundaries, anomaly support, predictions, and confusion counts. `multi_seed_summary.csv` records seed count, split settings, and aggregation. Inspect label alignment for overlap between synthetic label-generation patterns and detector rules. The report does not overwrite headline metrics in this README; update published snapshots only after reviewing what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
 
 ## Limitations
 
@@ -435,14 +458,21 @@ Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark.
 
 ## Controlled Edge-Case Stress Test
 
-Run a second, deliberately difficult evaluation separately from the original 1,588-row baseline:
+Run a second, deliberately difficult evaluation separately from the primary synthetic dataset:
 
 ```bash
 python -m src.stress_test_evaluation
 ```
 
-The stress test fits Isolation Forest on the historical synthetic logs only, then scores 51 controlled events across 15 scenarios: 10 clearly benign-labelled events across five scenarios, 24 suspicious-labelled events across six scenarios, and 17 ambiguous events across four scenarios. It includes a cross-account password-spraying pattern (one source IP failing against four accounts) and a separate ambiguous shared-network pattern. Clearly benign cases include a new IP, new device, new location, or unusual login hour in isolation, plus six successful logins spaced six minutes apart. Suspicious cases include brute-force-style failures from familiar context, rapid successful logins from familiar context, low-and-slow failures, daytime logins involving a new IP/location or new device/location, and failures against multiple accounts from one source IP. Four overlapping scenarios—rapid successful logins, low-and-slow failures, a new device plus location during daytime, and failures against multiple accounts from a shared network—are marked ambiguous rather than assumed benign or malicious.
+The stress test fits Isolation Forest on the historical synthetic logs only, then scores 62 controlled events across 17 scenarios: 21 clearly benign-labelled events across seven scenarios, 24 suspicious-labelled events across six scenarios, and 17 ambiguous events across four scenarios. It includes a cross-account password-spraying pattern (one source IP failing against four accounts) and a separate ambiguous shared-network pattern. Clearly benign cases include a new IP, new device, new location, or unusual login hour in isolation; six successful logins spaced six minutes apart; five mistyped-password failures followed by a successful login; and five familiar-context successful logins spaced 45 seconds apart. The last two are hard negatives intended to test whether ordinary user behaviour is over-alerted. Suspicious cases include brute-force-style failures from familiar context, rapid successful logins from familiar context, low-and-slow failures, daytime logins involving a new IP/location or new device/location, and failures against multiple accounts from one source IP. Four overlapping scenarios—rapid successful logins, low-and-slow failures, a new device plus location during daytime, and failures against multiple accounts from a shared network—are marked ambiguous rather than assumed benign or malicious.
 
-Feature engineering also counts distinct accounts with failed logins from the same source IP in an inclusive 15-minute window. Four distinct accounts is a project-specific trigger threshold, not a universal security standard. This signal can help expose password spraying, but shared office/NAT/VPN egress can produce similar patterns; therefore, an alert is evidence for investigation, not proof of an attack. The script reports event-level and scenario-level precision, recall, F1, false-positive rate, accuracy, and confusion counts using only clearly labelled normal/anomaly cases. Ambiguous events and scenarios are excluded from binary metrics and listed separately with each detector's alert outcome; they are not silently counted as false positives or true positives. It also reports the event position of the first alert in each scenario, so you can compare detection delay and identify completely missed sequences. It compares three approaches: Isolation Forest alone, the risk-score baseline (score >= 3), and a diagnostic hybrid that alerts when either ML or the rules flag an event. The hybrid is a layered stress-test comparison; it does not replace the dashboard's existing final-status logic. Combining detectors can improve recall but may also increase false positives, so compare both metrics rather than assuming the hybrid is automatically better. The tests cover ambiguous-label exclusion, scenario detection, first-alert positions, and hybrid prediction logic.
+Feature engineering also counts distinct accounts with failed logins from the same source IP in an inclusive 15-minute window. Four distinct accounts is a project-specific trigger threshold, not a universal security standard. This signal can help expose password spraying, but shared office/NAT/VPN egress can produce similar patterns; therefore, an alert is evidence for investigation, not proof of an attack. The script reports event-level and scenario-level precision, recall, F1, false-positive rate, accuracy, and confusion counts using only clearly labelled normal/anomaly cases. Ambiguous events and scenarios are excluded from binary metrics and listed separately with each detector's alert outcome; they are not silently counted as false positives or true positives. It also reports the event position of the first alert in each scenario, so you can compare detection delay and identify completely missed sequences. It compares three approaches: Isolation Forest alone, the risk-score baseline (score >= 3), and a diagnostic hybrid that alerts when either ML or the rules flag an event. The hybrid is a layered stress-test comparison; it does not replace the dashboard's existing final-status logic. Combining detectors can improve recall but may also increase false positives, so compare both metrics rather than assuming the hybrid is automatically better. The run writes event-level outcomes, scenario-level outcomes, and a focused false-positive/false-negative CSV under `reports/` (`stress-test-event-outcomes.csv`, `stress-test-scenario-outcomes.csv`, and `stress-test-errors.csv`). The error audit includes the detector, error type, scenario, event context, and relevant rolling-window/risk diagnostics. The tests cover ambiguous-label exclusion, hard-negative scenario construction, error-audit classification, scenario detection, first-alert positions, and hybrid prediction logic.
 
 **Important evaluation caveat:** the stress set is small and hand-designed, and its labels are assumptions for testing, not objective truth. It is intended to expose blind spots and help guide further test design—not to establish real-world detection performance. It is separate from the original dataset and does not change the baseline labels or its reported results.
+
+## Hybrid Threshold Comparison
+
+The robust evaluation now compares the existing automatic-contamination Isolation Forest baseline with the rule alerts, and also evaluates two diagnostic OR-hybrids using Isolation Forest contamination settings of 0.03 and 0.05. Each comparison uses the same chronological test windows. The overlap CSV records how many alerts are shared, ML-only, or rule-only; the summary groups those counts by comparison and reports the mean and standard deviation across seeds.
+
+The candidate methods are named `hybrid_contamination_0.03_or_rules` and `hybrid_contamination_0.05_or_rules` in the main evaluation CSV. Compare their precision, recall, and F1 against the corresponding ML-only and rules-only methods. A lower contamination setting does not guarantee better detection: it changes the model's alert volume, and the OR combination can increase false positives. Keep the current detector and dashboard logic unchanged until results are reviewed. These are synthetic-data experiments, not production performance claims.
+
