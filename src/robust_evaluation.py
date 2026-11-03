@@ -66,6 +66,35 @@ def _supervised_category_prior(train, test, field):
     return test[field].map(rates).fillna(0.0).gt(threshold).astype(int)
 
 
+def hybrid_overlap_diagnostics(ml_predictions, rule_predictions):
+    """Count how much the rule detector adds to the ML alert set."""
+    ml = np.asarray(ml_predictions, dtype=int).reshape(-1)
+    rules = np.asarray(rule_predictions, dtype=int).reshape(-1)
+    if ml.shape != rules.shape:
+        raise ValueError("ML and rule predictions must have the same length.")
+    if not np.isin(ml, [0, 1]).all() or not np.isin(rules, [0, 1]).all():
+        raise ValueError("ML and rule predictions must contain only binary 0/1 values.")
+
+    ml_alerts = ml == 1
+    rule_alerts = rules == 1
+    overlap = ml_alerts & rule_alerts
+    ml_exclusive = ml_alerts & ~rule_alerts
+    rule_exclusive = rule_alerts & ~ml_alerts
+    hybrid = ml_alerts | rule_alerts
+    return {
+        "rows": int(len(ml)),
+        "ml_alerts": int(ml_alerts.sum()),
+        "rule_alerts": int(rule_alerts.sum()),
+        "overlap_alerts": int(overlap.sum()),
+        "ml_exclusive_alerts": int(ml_exclusive.sum()),
+        "rule_exclusive_alerts": int(rule_exclusive.sum()),
+        "hybrid_alerts": int(hybrid.sum()),
+        "rule_alerts_added_by_hybrid": int(rule_exclusive.sum()),
+        "ml_alerts_added_by_hybrid": int(ml_exclusive.sum()),
+        "predictions_identical": bool(np.array_equal(ml, rules)),
+    }
+
+
 def evaluate(seed, df, train_fraction=0.4, windows=4):
     clean = preprocess_logs(df.copy(), verbose=False).sort_values("timestamp", kind="stable").reset_index(drop=True)
     clean["true_label"] = clean["true_label"].astype(str).str.lower()
@@ -90,6 +119,11 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         ml = (model.predict(test[MODEL_FEATURES]) == -1).astype(int)
         rule_result = apply_risk_scores(apply_rules(test.copy()))
         rules = (rule_result["risk_score"] >= 3).astype(int)
+        overlap = hybrid_overlap_diagnostics(ml, rules.to_numpy())
+        out.append({
+            "seed": seed, "window": w + 1, "metric_type": "hybrid_overlap",
+            **overlap,
+        })
         hybrid = ((ml == 1) | (rules.to_numpy() == 1)).astype(int)
         methods = {
             "supervised_category_prior_device": _supervised_category_prior(train, test, "device"),
@@ -148,6 +182,30 @@ def main():
     )
     print(summary.to_string())
     print(f"\nFull per-seed results: {output}")
+
+    overlap_rows = all_runs[
+        all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)) == "hybrid_overlap"
+    ].copy()
+    overlap_path = output.with_name(output.stem + "-overlap.csv")
+    overlap_rows.to_csv(overlap_path, index=False, na_rep="NA")
+    if not overlap_rows.empty:
+        overlap_metrics = [
+            "rows", "ml_alerts", "rule_alerts", "overlap_alerts",
+            "ml_exclusive_alerts", "rule_exclusive_alerts", "hybrid_alerts",
+            "rule_alerts_added_by_hybrid", "ml_alerts_added_by_hybrid",
+        ]
+        per_seed_overlap = overlap_rows.groupby("seed")[overlap_metrics].mean()
+        overlap_summary = per_seed_overlap.agg(["mean", "std"]).T
+        overlap_summary.columns = ["mean_per_seed", "std_across_seeds"]
+        overlap_summary_path = output.with_name(output.stem + "-overlap-summary.csv")
+        overlap_summary.to_csv(overlap_summary_path, na_rep="NA")
+        identical_rate = overlap_rows.groupby("seed")["predictions_identical"].mean()
+        print("\nHybrid prediction overlap (window counts; mean across seeds):")
+        print(overlap_summary.to_string())
+        print(f"\nShare of windows with identical ML/rule predictions: {identical_rate.mean():.4f}")
+        print(f"Overlap details: {overlap_path}")
+        print(f"Overlap summary: {overlap_summary_path}")
+
     scenarios = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)) == "scenario"]
     if not scenarios.empty:
         attacks = scenarios[scenarios["scenario_label"] == "attack"]
