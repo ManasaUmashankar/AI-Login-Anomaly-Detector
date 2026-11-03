@@ -89,3 +89,50 @@ def test_summary_csv_uses_explicit_na_token_for_undefined_values(tmp_path):
 
     assert loaded.columns.is_unique
     assert pd.isna(loaded.loc[0, "pr_auc_mean"])
+
+
+
+def test_hybrid_overlap_diagnostics_reports_added_alerts():
+    from src.robust_evaluation import hybrid_overlap_diagnostics
+
+    result = hybrid_overlap_diagnostics(
+        [1, 1, 0, 0, 1],
+        [1, 0, 1, 0, 1],
+    )
+
+    assert result == {
+        "rows": 5,
+        "ml_alerts": 3,
+        "rule_alerts": 3,
+        "overlap_alerts": 2,
+        "ml_exclusive_alerts": 1,
+        "rule_exclusive_alerts": 1,
+        "hybrid_alerts": 4,
+        "rule_alerts_added_by_hybrid": 1,
+        "ml_alerts_added_by_hybrid": 1,
+        "predictions_identical": False,
+    }
+
+
+def test_hybrid_overlap_diagnostics_detects_identical_predictions():
+    from src.robust_evaluation import hybrid_overlap_diagnostics
+
+    result = hybrid_overlap_diagnostics([0, 1, 1], [0, 1, 1])
+
+    assert result["predictions_identical"] is True
+    assert result["rule_alerts_added_by_hybrid"] == 0
+    assert result["hybrid_alerts"] == result["ml_alerts"]
+
+
+def test_hybrid_overlap_diagnostics_rejects_different_lengths():
+    from src.robust_evaluation import hybrid_overlap_diagnostics
+
+    with pytest.raises(ValueError, match="same length"):
+        hybrid_overlap_diagnostics([0, 1], [1])
+
+
+def test_hybrid_overlap_diagnostics_rejects_non_binary_predictions():
+    from src.robust_evaluation import hybrid_overlap_diagnostics
+
+    with pytest.raises(ValueError, match="binary"):
+        hybrid_overlap_diagnostics([0, 2], [0, 1])
