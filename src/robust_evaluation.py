@@ -119,12 +119,13 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         ml = (model.predict(test[MODEL_FEATURES]) == -1).astype(int)
         rule_result = apply_risk_scores(apply_rules(test.copy()))
         rules = (rule_result["risk_score"] >= 3).astype(int)
-        overlap = hybrid_overlap_diagnostics(ml, rules.to_numpy())
+        rule_array = rules.to_numpy(dtype=int)
+        overlap = hybrid_overlap_diagnostics(ml, rule_array)
         out.append({
             "seed": seed, "window": w + 1, "metric_type": "hybrid_overlap",
-            **overlap,
+            "comparison": "ml_auto_vs_rules", **overlap,
         })
-        hybrid = ((ml == 1) | (rules.to_numpy() == 1)).astype(int)
+        hybrid = ((ml == 1) | (rule_array == 1)).astype(int)
         methods = {
             "supervised_category_prior_device": _supervised_category_prior(train, test, "device"),
             "supervised_category_prior_ip": _supervised_category_prior(train, test, "ip_address"),
@@ -135,7 +136,16 @@ def evaluate(seed, df, train_fraction=0.4, windows=4):
         }
         for contamination in (0.01, 0.03, 0.05, 0.10):
             sweep_model = train_model(train, seed=seed, contamination=contamination)
-            methods[f"ml_contamination_{contamination:.2f}"] = (sweep_model.predict(test[MODEL_FEATURES]) == -1).astype(int)
+            sweep_predictions = (sweep_model.predict(test[MODEL_FEATURES]) == -1).astype(int)
+            methods[f"ml_contamination_{contamination:.2f}"] = sweep_predictions
+            if contamination in (0.03, 0.05):
+                methods[f"hybrid_contamination_{contamination:.2f}_or_rules"] = ((sweep_predictions == 1) | (rule_array == 1)).astype(int)
+                candidate_overlap = hybrid_overlap_diagnostics(sweep_predictions, rule_array)
+                out.append({
+                    "seed": seed, "window": w + 1, "metric_type": "hybrid_overlap",
+                    "comparison": f"ml_contamination_{contamination:.2f}_vs_rules",
+                    **candidate_overlap,
+                })
         for method, pred in methods.items():
             m = _metrics(y, pred)
             row = {"seed": seed, "window": w + 1, "method": method, **m,
@@ -194,15 +204,17 @@ def main():
             "ml_exclusive_alerts", "rule_exclusive_alerts", "hybrid_alerts",
             "rule_alerts_added_by_hybrid", "ml_alerts_added_by_hybrid",
         ]
-        per_seed_overlap = overlap_rows.groupby("seed")[overlap_metrics].mean()
-        overlap_summary = per_seed_overlap.agg(["mean", "std"]).T
-        overlap_summary.columns = ["mean_per_seed", "std_across_seeds"]
+        per_seed_overlap = overlap_rows.groupby(["seed", "comparison"], dropna=False)[overlap_metrics].mean()
+        overlap_summary = per_seed_overlap.groupby("comparison").agg(["mean", "std"])
+        overlap_summary.columns = [f"{metric}_{stat}" for metric, stat in overlap_summary.columns]
+        overlap_summary = overlap_summary.rename(columns={"mean_mean": "mean_per_seed", "mean_std": "std_across_seeds"})
         overlap_summary_path = output.with_name(output.stem + "-overlap-summary.csv")
         overlap_summary.to_csv(overlap_summary_path, na_rep="NA")
-        identical_rate = overlap_rows.groupby("seed")["predictions_identical"].mean()
+        identical_rate = overlap_rows.groupby(["seed", "comparison"], dropna=False)["predictions_identical"].mean().groupby("comparison").mean()
         print("\nHybrid prediction overlap (window counts; mean across seeds):")
         print(overlap_summary.to_string())
-        print(f"\nShare of windows with identical ML/rule predictions: {identical_rate.mean():.4f}")
+        print("\nShare of windows with identical ML/rule predictions:")
+        print(identical_rate.to_string())
         print(f"Overlap details: {overlap_path}")
         print(f"Overlap summary: {overlap_summary_path}")
 
