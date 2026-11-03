@@ -59,3 +59,33 @@ def test_supervised_category_prior_rejects_unknown_training_labels():
 
     with pytest.raises(ValueError, match="normal/anomaly"):
         _supervised_category_prior(train, test, "device")
+
+
+def test_single_seed_summary_keeps_sample_std_undefined():
+    from src.robust_evaluation import summarize_seed_metrics
+
+    frame = pd.DataFrame([{
+        "seed": 7, "method": "ml_only", "precision": 0.8,
+        "recall": 0.7, "f1": 0.74, "pr_auc": 0.75,
+    }])
+    summary = summarize_seed_metrics(frame)
+
+    assert pd.isna(summary.loc["ml_only", "precision_std"])
+    assert pd.isna(summary.loc["ml_only", "recall_std"])
+    assert pd.isna(summary.loc["ml_only", "f1_std"])
+    assert pd.isna(summary.loc["ml_only", "pr_auc_std"])
+
+
+def test_summary_csv_uses_explicit_na_token_for_undefined_values(tmp_path):
+    from src.robust_evaluation import summarize_seed_metrics
+
+    frame = pd.DataFrame([
+        {"seed": 1, "method": "hybrid", "precision": 0.8, "recall": 0.7, "f1": 0.74, "pr_auc": float("nan")},
+        {"seed": 2, "method": "hybrid", "precision": 0.9, "recall": 0.8, "f1": 0.84, "pr_auc": float("nan")},
+    ])
+    path = tmp_path / "summary.csv"
+    summarize_seed_metrics(frame).to_csv(path, na_rep="NA")
+    loaded = pd.read_csv(path, na_values=["NA"])
+
+    assert loaded.columns.is_unique
+    assert pd.isna(loaded.loc[0, "pr_auc_mean"])

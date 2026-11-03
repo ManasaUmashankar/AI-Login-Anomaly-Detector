@@ -33,7 +33,11 @@ def summarize_seed_metrics(per_seed):
     for metric in SUMMARY_METRICS:
         aggregations[f"{metric}_mean"] = (metric, "mean")
         aggregations[f"{metric}_std"] = (metric, "std")
-    summary = per_seed.groupby("method").agg(**aggregations).round(4)
+    summary = per_seed.groupby("method", dropna=False).agg(**aggregations).round(4)
+    # Sample standard deviation is undefined with one seed; keep it explicit.
+    if "seed" in per_seed.columns and per_seed["seed"].nunique(dropna=True) <= 1:
+        for metric in SUMMARY_METRICS:
+            summary[f"{metric}_std"] = np.nan
     if not summary.columns.is_unique:
         raise ValueError("Robust evaluation summary contains duplicate column names.")
     return summary
@@ -138,8 +142,10 @@ def main():
     summary = summarize_seed_metrics(per_seed)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    all_runs.to_csv(output, index=False)
-    summary.to_csv(output.with_name(output.stem + "-summary.csv"), index_label="method")
+    all_runs.to_csv(output, index=False, na_rep="NA")
+    summary.to_csv(
+        output.with_name(output.stem + "-summary.csv"), index_label="method", na_rep="NA"
+    )
     print(summary.to_string())
     print(f"\nFull per-seed results: {output}")
     scenarios = all_runs[all_runs.get("metric_type", pd.Series(index=all_runs.index, dtype=object)) == "scenario"]

@@ -1,4 +1,4 @@
-""""Run synthetic-data audits and detector comparisons into reproducible reports."""
+"""Run synthetic-data audits and detector comparisons into reproducible reports."""
 from pathlib import Path
 import pandas as pd
 
@@ -8,6 +8,11 @@ from src.read_dataset import load_logs
 from src.stress_test_evaluation import evaluate_scenario_detection, evaluate_stress_test
 
 METRICS = ("precision", "recall", "f1", "false_positive_rate", "accuracy")
+TEMPORAL_COLUMNS = (
+    "seed", "window", "detector", "train_rows", "test_rows",
+    "train_end", "test_start", "test_end", "actual_anomalies",
+    "predicted_anomalies", *METRICS, "tn", "fp", "fn", "tp",
+)
 DEFAULT_REPORT_DIR = Path(__file__).resolve().parents[1] / "reports"
 OVERVIEW_COLUMNS = (
     "evaluation_scope", "detector", "metric", "mean", "std", "tp", "fp", "fn", "tn",
@@ -93,6 +98,7 @@ def _write_markdown_report(path, df, audit, overview):
         "High agreement can indicate that the generator encodes signals used by the rules. Treat it as an overlap diagnostic, not an independent test.", "",
         "## Chronological multi-seed evaluation", "",
         "Mean and sample standard deviation are computed across seed-level averages of chronological holdout-window metrics. Seed variation on one dataset is not uncertainty across datasets.", "",
+        "The temporal CSV preserves seed, window, train/test counts, chronological boundaries, anomaly support, predictions, and confusion counts. The multi-seed summary records split settings and aggregation.", "",
         _markdown_table(temporal, ["detector", "metric", "mean", "std"]), "",
         "## Controlled edge-case stress test", "",
         "The stress test is hand-designed. Event-level metrics score clearly labelled events only; ambiguous events are reported separately. Scenario-level metrics count each labelled scenario once.", "",
@@ -151,21 +157,30 @@ def run_evaluation_suite(df=None, seeds=range(20), train_fraction=0.40, windows=
     for key, detector in (("metrics", "Isolation Forest"), ("baseline_metrics", "Rule baseline")):
         for metric in METRICS:
             values = seed_result["summary"][key][metric]
-            seed_rows.append({"detector": detector, "metric": metric, "mean": values["mean"], "std": values["std"]})
+            seed_rows.append({
+                "detector": detector, "metric": metric, "mean": values["mean"], "std": values["std"],
+                "seeds": len(seed_result["seeds"]), "train_fraction": train_fraction, "windows": windows,
+                "aggregation": "unweighted window mean per seed; mean and sample std across seeds",
+            })
         for seed, window_results in seed_result["runs"].items():
             for window in window_results:
                 values = window[key]
+                meta = window["metadata"]
                 temporal_rows.append({
                     "seed": seed, "window": window["window"], "detector": detector,
-                    "train_rows": window["metadata"]["train_rows"],
-                    "test_rows": window["metadata"]["test_rows"],
-                    "actual_anomalies": window["metadata"]["actual_anomalies"],
-                    "predicted_anomalies": window["metadata"]["predicted_anomalies"] if key == "metrics" else None,
+                    "train_rows": meta["train_rows"], "test_rows": meta["test_rows"],
+                    "train_end": meta["train_end"], "test_start": meta["test_start"],
+                    "test_end": meta["test_end"], "actual_anomalies": meta["actual_anomalies"],
+                    "predicted_anomalies": meta["predicted_anomalies"] if key == "metrics" else None,
                     **{metric: values[metric] for metric in METRICS},
-                    **{name: values[name] for name in ("tp", "fp", "fn", "tn")},
+                    **{name: values[name] for name in ("tn", "fp", "fn", "tp")},
                 })
-    pd.DataFrame(seed_rows).to_csv(out_dir / "multi_seed_summary.csv", index=False)
-    pd.DataFrame(temporal_rows).to_csv(out_dir / "temporal_window_metrics.csv", index=False)
+    seed_frame = pd.DataFrame(seed_rows)
+    temporal_frame = pd.DataFrame(temporal_rows, columns=TEMPORAL_COLUMNS)
+    if not seed_frame.columns.is_unique or not temporal_frame.columns.is_unique:
+        raise ValueError("Evaluation output contains duplicate CSV headers.")
+    seed_frame.to_csv(out_dir / "multi_seed_summary.csv", index=False, na_rep="NA")
+    temporal_frame.to_csv(out_dir / "temporal_window_metrics.csv", index=False, na_rep="NA")
 
     stress_summary, event_rows = evaluate_stress_test(df)
     scenario_metrics, scenario_rows = evaluate_scenario_detection(event_rows)
@@ -189,6 +204,9 @@ def run_evaluation_suite(df=None, seeds=range(20), train_fraction=0.40, windows=
 
     print("Evaluation suite completed. All results are synthetic-data diagnostics, not a real-world benchmark.")
     print("Reports written to: " + str(out_dir.resolve()))
+    print("\nRun configuration:")
+    print({"seeds": seed_result["seeds"], "train_fraction": train_fraction, "windows": windows,
+           "aggregation": "unweighted window mean per seed; mean and sample std across seeds"})
     print("\nLabel counts:", df["true_label"].astype(str).str.strip().str.lower().value_counts().to_dict())
     print("\nTemporal multi-seed summary:")
     print(pd.DataFrame(seed_rows).to_string(index=False))

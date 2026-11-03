@@ -330,7 +330,9 @@ The dataset contains planted synthetic scenarios. Performance on those scenarios
 
 Run `python -m src.evaluate_model` to perform a **20-seed temporal evaluation** across four chronological holdout windows per seed. Each seed keeps the same time-ordered splits but varies Isolation Forest's random state. The report summarizes mean and sample standard deviation of each metric across seed-level averages, compares Isolation Forest with the rule-based risk-score baseline (score >= 3), and prints detailed window metrics for seed 0 (the first seed in the default sweep). This measures sensitivity to model randomness; it does not measure uncertainty across different datasets or real environments.
 
-The separate `src/robust_evaluation.py` experiment also includes one-field category-prior baselines. These are **supervised baselines**, not unsupervised detectors: each estimates category anomaly rates from labelled training rows only, then applies those rates to later holdout rows. They are now named `supervised_category_prior_*` to make that distinction explicit. They must not be described as independent unsupervised anomaly detectors or compared without noting their access to training labels.\n\nThe model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
+The separate `src/robust_evaluation.py` experiment also includes one-field category-prior baselines. These are **supervised baselines**, not unsupervised detectors: each estimates category anomaly rates from labelled training rows only, then applies those rates to later holdout rows. They are now named `supervised_category_prior_*` to make that distinction explicit. They must not be described as independent unsupervised anomaly detectors or compared without noting their access to training labels.
+
+The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
 ## Latest Evaluation Snapshot
 
@@ -372,7 +374,7 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 
 Run `python -m src.evaluation_suite` to execute the label/rule alignment audit, 20-seed chronological evaluation, and controlled stress test in one reproducible command. It compares Isolation Forest, the rule baseline, and a diagnostic hybrid on the stress cases, with both event-level and scenario-level metrics. Ambiguous stress cases remain separately reported rather than being silently treated as benign or malicious.
 
-The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. Inspect the label-alignment results for overlap between the synthetic label-generation patterns and the detector rules. The report intentionally does not overwrite the headline metrics in this README: review the output and update any published metric snapshot only after confirming what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
+The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. `temporal_window_metrics.csv` preserves seed, window, train/test row counts, chronological boundaries, anomaly support, predictions, and confusion counts. `multi_seed_summary.csv` records seed count, split settings, and aggregation. Inspect label alignment for overlap between synthetic label-generation patterns and detector rules. The report does not overwrite headline metrics in this README; update published snapshots only after reviewing what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
 
 ## Limitations
 
@@ -454,7 +456,7 @@ Treat the report as a **synthetic-data diagnostic**, not a real-world benchmark.
 
 ## Controlled Edge-Case Stress Test
 
-Run a second, deliberately difficult evaluation separately from the original 1,588-row baseline:
+Run a second, deliberately difficult evaluation separately from the primary synthetic dataset:
 
 ```bash
 python -m src.stress_test_evaluation
