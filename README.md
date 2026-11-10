@@ -544,3 +544,23 @@ python -m src.model_comparison
 This compares **Isolation Forest**, **Local Outlier Factor (novelty mode)**, and **One-Class SVM** across future holdout windows. Each model is trained only on earlier rows; labels are used only after prediction to calculate metrics. The output is written to `reports/model_comparison.csv`.
 
 Do not select a model from accuracy alone. Compare recall, false-positive rate, precision, F1, anomaly support, and consistency across windows. All three models are still being evaluated on the same synthetic generator, so this comparison does not establish real-world generalisation.
+
+
+### OpenSSH authentication-log ingestion
+
+The project can now parse explicit SSH authentication events from Linux `auth.log` files into the same canonical schema used by the detector. It recognizes accepted and failed password/public-key/keyboard-interactive events, counts consecutive failures per account and source IP, and skips unrelated daemon messages.
+
+Example:
+
+```python
+from src.openssh_ingest import load_openssh_auth_log
+from src.preprocessing import preprocess_logs
+from src.feature_engineering import build_features
+
+events = load_openssh_auth_log("/var/log/auth.log", year=2026)
+clean = preprocess_logs(events, verbose=False)
+features = build_features(clean)
+print(features[["timestamp", "username", "ip_address", "login_status"]].tail())
+```
+
+The parser deliberately sets location and device to `unknown`; it does not invent geolocation or endpoint identity. Syslog timestamps omit the year, so pass the correct year for archived files. This is an ingestion adapter, not a claim that the saved synthetic-data model is calibrated for your server. For meaningful ML scoring, build a representative benign historical baseline from the target environment and evaluate it separately before deployment.
