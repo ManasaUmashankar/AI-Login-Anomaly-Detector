@@ -567,7 +567,7 @@ The parser deliberately sets location and device to `unknown`; it does not inven
 
 ### API authentication, rate limiting and SIEM forwarding
 
-The prediction endpoint now requires an API key in the `X-API-Key` header. If `DETECTOR_API_KEY` is not configured, prediction requests fail closed with HTTP 503. A per-client in-memory sliding-window limiter returns HTTP 429 when the configured threshold is reached. The limiter is per process; use an API gateway or shared Redis-backed limiter for multi-worker/multi-instance deployments.
+The prediction endpoint now requires an API key in the `X-API-Key` header. If `DETECTOR_API_KEY` is not configured, prediction requests fail closed with HTTP 503. A per-client in-memory sliding-window limiter returns HTTP 429 when the configured threshold is reached. The limiter is per process and keys off the immediate TCP peer. When all requests pass through one reverse proxy, they can share that proxy's bucket; use a trusted gateway that applies client-aware rate limiting or a shared Redis-backed limiter for multi-worker/multi-instance deployments.
 
 Optional event forwarding supports:
 
@@ -576,7 +576,7 @@ Optional event forwarding supports:
 
 Forwarding is disabled when credentials are absent. TLS certificate verification remains enabled. Delivery failures are logged without logging secrets or event payloads, and do not turn a successful detection into a failed prediction response. For reliable delivery at scale, use a durable queue/outbox and retry worker; this prototype makes bounded synchronous HTTP attempts.
 
-Copy `.env.example` to `.env`, generate a long random API key, and fill only the SIEM settings you actually use. Never commit `.env`.
+Copy `.env.example` to `.env`, generate a long random API key, and fill only the SIEM settings you actually use. Never commit `.env`. For local-only use, start the API with `docker compose up --build -d detector-api`.
 
 For public TLS termination with Caddy, configure `DOMAIN` and run:
 
