@@ -518,3 +518,16 @@ docker compose up --build
 
 The container exposes port 8000 and mounts the local data and model folders read-only. Visit `http://localhost:8000/docs` for the interactive API docs.
 
+
+### Detection explanations and MITRE ATT&CK
+
+The API includes conservative ATT&CK references for a small set of specific authentication patterns:
+
+- Repeated failed attempts: possible alignment with **T1110.001 – Password Guessing**.
+- Failures against multiple accounts from one source: possible alignment with **T1110.003 – Password Spraying**.
+
+These are investigation hints, not confirmed technique attribution. Generic novelty signals and Isolation Forest anomalies are deliberately left unmapped because they are not specific enough.
+
+The API also emits structured request metadata (method, path, status, duration) without writing usernames, IP addresses, or request bodies to its access log.
+
+**Deployment boundary:** Docker Compose binds the API to `127.0.0.1` by default. Do not expose this prototype directly to the internet. A network deployment needs authentication, TLS, rate limiting, tenant isolation, a persistent event store, and monitoring.
