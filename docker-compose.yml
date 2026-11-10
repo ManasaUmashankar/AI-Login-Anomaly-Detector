@@ -23,7 +23,7 @@ services:
     container_name: ai-login-anomaly-detector-proxy
     profiles: ["tls"]
     environment:
-      DOMAIN: ${DOMAIN:?Set DOMAIN in your .env file for public TLS}
+      DOMAIN: ${DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
