@@ -35,4 +35,4 @@ def test_external_evaluation_requires_independent_label_provenance(tmp_path):
     path = tmp_path / "empty.csv"
     frame.to_csv(path, index=False)
     with pytest.raises(ValueError, match="label source"):
-        evaluate_real_world_csv(path, label_provenance="synthetic labels")
+        evaluate_real_world_csv(path, label_provenance="Labels produced by the same synthetic generator")
