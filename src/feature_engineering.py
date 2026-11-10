@@ -26,7 +26,7 @@ NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + [
 def add_time_features(df):
     """Hour, weekday, and an 'unusual hour' flag."""
     df["login_hour"] = df["timestamp"].dt.hour
-    df["day_of_week"] = df["timestamp"].dt.dayofweek   # 0 = Monday
+    df["day_of_week"] = df["timestamp"].dt.day_of_week   # 0 = Monday
     too_early = df["login_hour"] < UNUSUAL_BEFORE_HOUR
     too_late = df["login_hour"] >= UNUSUAL_FROM_HOUR
     df["is_unusual_hour"] = (too_early | too_late).astype(int)
