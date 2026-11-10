@@ -1,0 +1,10 @@
+services:
+  detector-api:
+    build: .
+    container_name: ai-login-anomaly-detector-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+    restart: unless-stopped
