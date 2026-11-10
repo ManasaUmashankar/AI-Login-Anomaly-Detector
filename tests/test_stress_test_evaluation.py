@@ -226,7 +226,9 @@ def test_error_audit_lists_false_positives_and_false_negatives():
     ])
 
     audit = build_error_audit(rows)
-    assert set(audit["detector"]) == {"rules", "ml", "hybrid"}
+    # The ML predictions are correct for both rows, so the error-only audit
+    # correctly has no ML rows. It should still retain errors from rules/hybrid.
+    assert set(audit["detector"]) == {"rules", "hybrid"}
     assert ((audit["detector"] == "rules") & (audit["error_type"] == "false_positive")).sum() == 1
     assert ((audit["detector"] == "rules") & (audit["error_type"] == "false_negative")).sum() == 1
 
