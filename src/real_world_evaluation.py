@@ -25,6 +25,13 @@ def evaluate_real_world_csv(csv_path, *, label_provenance, train_fraction=0.70):
     """Return metrics and a compact report for an external labelled CSV."""
     if not label_provenance or len(label_provenance.strip()) < 12:
         raise ValueError("Describe the independent label source with --label-provenance.")
+    provenance_lower = label_provenance.lower()
+    prohibited_claims = ("synthetic", "same generator", "generated labels")
+    if any(term in provenance_lower for term in prohibited_claims):
+        raise ValueError(
+            "The label source must be independent; synthetic or generator-derived labels "
+            "cannot substantiate real-world evaluation."
+        )
     source = Path(csv_path)
     frame = pd.read_csv(source)
     missing = sorted(set(REQUIRED_COLUMNS + ["true_label"]) - set(frame.columns))
