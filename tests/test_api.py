@@ -4,7 +4,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import api
+from src.api_security import enforce_rate_limit, require_api_key
 
+
+# Authentication/rate-limit behaviour is tested separately below. API route
+# behaviour tests override these dependencies so they remain deterministic.
+api.app.dependency_overrides[require_api_key] = lambda: True
+api.app.dependency_overrides[enforce_rate_limit] = lambda: True
 
 client = TestClient(api.app)
 
@@ -104,3 +110,23 @@ def test_predict_returns_explanation(monkeypatch):
     assert body["final_status"] == "Normal activity"
     assert isinstance(body["detection_reasons"], list)
     assert "not proof" in body["disclaimer"]
+
+def test_api_key_fails_closed_when_not_configured(monkeypatch):
+    from fastapi import HTTPException
+    import src.api_security as security
+
+    monkeypatch.setattr(security, "API_KEY", "")
+    with pytest.raises(HTTPException) as error:
+        security.require_api_key(None)
+    assert error.value.status_code == 503
+
+
+def test_api_key_rejects_invalid_and_accepts_valid(monkeypatch):
+    from fastapi import HTTPException
+    import src.api_security as security
+
+    monkeypatch.setattr(security, "API_KEY", "test-secret")
+    with pytest.raises(HTTPException) as error:
+        security.require_api_key("wrong")
+    assert error.value.status_code == 401
+    assert security.require_api_key("test-secret") is True
