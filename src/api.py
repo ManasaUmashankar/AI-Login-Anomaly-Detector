@@ -72,6 +72,7 @@ def predict(event: LoginEvent):
 
     history = load_logs()
     event_row = event.model_dump()
+    event_id = event_row["session_id"]
     timestamp = event_row["timestamp"]
     if timestamp.tzinfo is not None:
         timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
@@ -88,7 +89,10 @@ def predict(event: LoginEvent):
     scored = apply_risk_scores(scored)
     scored = add_ml_reason(scored)
 
-    result = scored.iloc[-1]
+    matching_event = scored.loc[scored["session_id"] == event_id]
+    if matching_event.empty:
+        raise HTTPException(status_code=422, detail="Submitted event was removed during preprocessing.")
+    result = matching_event.iloc[-1]
     final_status = final_status_for(result["risk_level"], result["ml_result"])
     reasons = [reason.strip() for reason in str(result["detection_reasons"]).split(";") if reason.strip()]
 
