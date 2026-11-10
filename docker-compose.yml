@@ -2,9 +2,40 @@ services:
   detector-api:
     build: .
     container_name: ai-login-anomaly-detector-api
+    environment:
+      DETECTOR_API_KEY: ${DETECTOR_API_KEY:?Set DETECTOR_API_KEY in your .env file}
+      DETECTOR_RATE_LIMIT_REQUESTS: ${DETECTOR_RATE_LIMIT_REQUESTS:-30}
+      DETECTOR_RATE_LIMIT_WINDOW_SECONDS: ${DETECTOR_RATE_LIMIT_WINDOW_SECONDS:-60}
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+      ELASTICSEARCH_API_KEY: ${ELASTICSEARCH_API_KEY:-}
+      ELASTICSEARCH_INDEX: ${ELASTICSEARCH_INDEX:-ai-login-anomaly-detector}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data:ro
       - ./models:/app/models:ro
     restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    container_name: ai-login-anomaly-detector-proxy
+    profiles: ["tls"]
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in your .env file for public TLS}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - detector-api
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
