@@ -4,15 +4,26 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import api
-from src.api_security import enforce_rate_limit, require_api_key
+import src.api_security as security
 
 
-# Authentication/rate-limit behaviour is tested separately below. API route
-# behaviour tests override these dependencies so they remain deterministic.
-api.app.dependency_overrides[require_api_key] = lambda: True
-api.app.dependency_overrides[enforce_rate_limit] = lambda: True
+# Use a test-only key and exercise the real route dependencies in API tests.
+security.API_KEY = "test-only-api-key"
+client = TestClient(api.app, headers={"X-API-Key": "test-only-api-key"})
 
-client = TestClient(api.app)
+
+def test_prediction_requires_api_key():
+    unauthenticated = TestClient(api.app)
+    response = unauthenticated.post("/predict", json={
+        "timestamp": "2026-11-10T10:00:00",
+        "username": "alice",
+        "ip_address": "203.0.113.10",
+        "location": "Bengaluru, India",
+        "device": "Windows Laptop",
+        "login_status": "success",
+        "failed_attempts": 0,
+    })
+    assert response.status_code == 401
 
 
 def test_health_endpoint():
