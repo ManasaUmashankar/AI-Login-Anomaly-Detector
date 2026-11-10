@@ -531,3 +531,16 @@ These are investigation hints, not confirmed technique attribution. Generic nove
 The API also emits structured request metadata (method, path, status, duration) without writing usernames, IP addresses, or request bodies to its access log.
 
 **Deployment boundary:** Docker Compose binds the API to `127.0.0.1` by default. Do not expose this prototype directly to the internet. A network deployment needs authentication, TLS, rate limiting, tenant isolation, a persistent event store, and monitoring.
+
+
+### Unsupervised model comparison
+
+Run the chronological model comparison:
+
+```bash
+python -m src.model_comparison
+```
+
+This compares **Isolation Forest**, **Local Outlier Factor (novelty mode)**, and **One-Class SVM** across future holdout windows. Each model is trained only on earlier rows; labels are used only after prediction to calculate metrics. The output is written to `reports/model_comparison.csv`.
+
+Do not select a model from accuracy alone. Compare recall, false-positive rate, precision, F1, anomaly support, and consistency across windows. All three models are still being evaluated on the same synthetic generator, so this comparison does not establish real-world generalisation.
