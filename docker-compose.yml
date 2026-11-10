@@ -3,7 +3,7 @@ services:
     build: .
     container_name: ai-login-anomaly-detector-api
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data:ro
       - ./models:/app/models:ro
