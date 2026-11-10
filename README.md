@@ -476,3 +476,45 @@ The robust evaluation now compares the existing automatic-contamination Isolatio
 
 The candidate methods are named `hybrid_contamination_0.03_or_rules` and `hybrid_contamination_0.05_or_rules` in the main evaluation CSV. Compare their precision, recall, and F1 against the corresponding ML-only and rules-only methods. A lower contamination setting does not guarantee better detection: it changes the model's alert volume, and the OR combination can increase false positives. Keep the current detector and dashboard logic unchanged until results are reviewed. These are synthetic-data experiments, not production performance claims.
 
+
+## REST API (FastAPI)
+
+The optional API scores a submitted login event against the local historical CSV and returns a risk level, Isolation Forest result, anomaly score, final disposition, and human-readable detection reasons.
+
+Install dependencies and start the service:
+
+```bash
+uvicorn src.api:app --reload
+```
+
+- Health: `GET /health`
+- Model readiness: `GET /ready`
+- Score one event: `POST /predict`
+- Interactive API documentation: `/docs`
+
+Example request:
+
+```json
+{
+  "timestamp": "2026-11-10T10:00:00",
+  "username": "alice",
+  "ip_address": "203.0.113.25",
+  "location": "Bengaluru, India",
+  "device": "Windows Laptop",
+  "login_status": "failed",
+  "failed_attempts": 1
+}
+```
+
+The service uses the repository's CSV as its historical context. It is a local prototype, not a multi-user production service: deploy with a persistent event store, authenticated access, tenant isolation, rate limiting, and operational monitoring before exposing it to a network.
+
+### Docker
+
+Build and start the API:
+
+```bash
+docker compose up --build
+```
+
+The container exposes port 8000 and mounts the local data and model folders read-only. Visit `http://localhost:8000/docs` for the interactive API docs.
+
