@@ -22,7 +22,7 @@ from src.anomaly_detector import (
     final_status_for,
     load_model,
 )
-from src.detection_rules import apply_risk_scores, apply_rules
+from src.detection_rules import RISK_SIGNALS, SIGNAL_REASONS, apply_risk_scores, apply_rules
 from src.feature_engineering import build_features
 from src.preprocessing import preprocess_logs
 from src.read_dataset import load_logs
@@ -124,6 +124,16 @@ def predict(event: LoginEvent):
     result = matching_event.iloc[-1]
     final_status = final_status_for(result["risk_level"], result["ml_result"])
     reasons = [reason.strip() for reason in str(result["detection_reasons"]).split(";") if reason.strip()]
+    # Explain every point contributing to the risk score, separately from rule/ML alerts.
+    risk_signals = [
+        {
+            "signal": name,
+            "points": points,
+            "explanation": SIGNAL_REASONS[name],
+        }
+        for name, points, signal_function in RISK_SIGNALS
+        if bool(signal_function(matching_event).iloc[0])
+    ]
     mitre = map_detection_reasons(reasons)
     prediction = {
         "timestamp": result["timestamp"].isoformat(),
@@ -135,6 +145,7 @@ def predict(event: LoginEvent):
         "anomaly_score": float(result["anomaly_score"]),
         "final_status": final_status,
         "detection_reasons": reasons,
+        "risk_signals": risk_signals,
         "mitre_attack": mitre,
     }
     siem_delivery = forward_to_configured_siems(build_siem_event(prediction))
@@ -155,6 +166,7 @@ def predict(event: LoginEvent):
         "anomaly_score": float(result["anomaly_score"]),
         "final_status": final_status,
         "detection_reasons": reasons,
+        "risk_signals": risk_signals,
         "mitre_attack": mitre,
         "siem_delivery": siem_delivery,
         "disclaimer": "An anomaly is an investigation signal, not proof of account compromise.",
