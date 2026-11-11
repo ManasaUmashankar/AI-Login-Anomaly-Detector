@@ -120,6 +120,7 @@ def test_predict_returns_explanation(monkeypatch):
     assert body["ml_result"] == "Normal"
     assert body["final_status"] == "Normal activity"
     assert isinstance(body["detection_reasons"], list)
+    assert body["risk_signals"] == []
     assert "not proof" in body["disclaimer"]
 
 def test_api_key_fails_closed_when_not_configured(monkeypatch):
