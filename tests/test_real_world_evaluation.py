@@ -8,12 +8,13 @@ from src.real_world_evaluation import evaluate_real_world_csv
 def test_external_evaluation_uses_chronological_holdout(tmp_path):
     rows = []
     for i in range(40):
+        is_anomaly = i % 3 == 0
         rows.append([
             (pd.Timestamp("2026-01-01") + pd.Timedelta(hours=i)).strftime("%Y-%m-%d %H:%M:%S"),
             f"user-{i % 4}", f"203.0.113.{10 + i % 4}", "Bengaluru, India",
-            "Windows Laptop", "failed" if i % 11 == 0 else "success",
-            5 if i % 11 == 0 else 0, "test-agent", f"session-{i}",
-            "anomaly" if i % 11 == 0 else "normal",
+            "Windows Laptop", "failed" if is_anomaly else "success",
+            5 if is_anomaly else 0, "test-agent", f"session-{i}",
+            "anomaly" if is_anomaly else "normal",
         ])
     path = tmp_path / "external_auth.csv"
     pd.DataFrame(rows, columns=REQUIRED_COLUMNS + ["true_label"]).to_csv(path, index=False)
@@ -28,6 +29,7 @@ def test_external_evaluation_uses_chronological_holdout(tmp_path):
     assert report["training_rows"] + report["holdout_rows"] == 40
     assert report["training_end"] < report["holdout_start"]
     assert set(report["metrics"]) == {"isolation_forest", "rules", "hybrid"}
+    assert report["holdout_label_counts"]["normal"] >= 2
     assert report["holdout_label_counts"]["anomaly"] >= 2
     assert len(report["dataset_sha256"]) == 64
 
