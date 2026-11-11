@@ -5,6 +5,7 @@ chronological split for scoring; the model is fitted on earlier records only.
 """
 import argparse
 import json
+import hashlib
 from pathlib import Path
 
 import pandas as pd
@@ -72,7 +73,14 @@ def evaluate_real_world_csv(csv_path, *, label_provenance, train_fraction=0.70):
         ml_pred.eq("anomaly") | rule_pred.eq("anomaly")
     ).map({True: "anomaly", False: "normal"})
     actual = normalize_labels(test["true_label"])
+    holdout_label_counts = actual.value_counts().to_dict()
+    if set(holdout_label_counts) != {"normal", "anomaly"} or min(holdout_label_counts.values()) < 2:
+        raise ValueError(
+            "Chronological holdout must contain at least two independently labelled "
+            "normal events and two anomaly events; provide a larger or better-covered dataset."
+        )
 
+    dataset_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
     metrics = {
         "isolation_forest": calculate_metrics(actual, ml_pred),
         "rules": calculate_metrics(actual, rule_pred),
@@ -81,6 +89,7 @@ def evaluate_real_world_csv(csv_path, *, label_provenance, train_fraction=0.70):
     report = {
         "evaluation_type": "independently_labelled_external_authentication_logs",
         "dataset_file_name": source.name,
+        "dataset_sha256": dataset_sha256,
         "label_provenance": label_provenance.strip(),
         "rows_after_preprocessing": len(features),
         "training_rows": len(train),
@@ -88,6 +97,7 @@ def evaluate_real_world_csv(csv_path, *, label_provenance, train_fraction=0.70):
         "training_end": str(train["timestamp"].max()),
         "holdout_start": str(test["timestamp"].min()),
         "holdout_end": str(test["timestamp"].max()),
+        "holdout_label_counts": {key: int(value) for key, value in holdout_label_counts.items()},
         "actual_holdout_anomalies": int((actual == "anomaly").sum()),
         "metrics": {
             name: {
@@ -102,6 +112,7 @@ def evaluate_real_world_csv(csv_path, *, label_provenance, train_fraction=0.70):
             "The synthetic-trained model is not assumed to generalise to this environment.",
             "Use a separate representative training baseline before operational deployment.",
             "Review false positives and false negatives with a security analyst.",
+            "A small holdout is a smoke test only; confidence intervals and broader time/environment coverage are still needed.",
         ],
     }
     return report
