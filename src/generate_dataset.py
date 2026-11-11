@@ -249,6 +249,21 @@ def make_rapid_rows(name):
     return rows
 
 
+
+def make_password_spray_rows(account_names, source_ip, start_time):
+    """Generate low-volume failures across accounts from one source IP."""
+    if len(account_names) < 4:
+        raise ValueError("Password-spray scenarios require at least four accounts.")
+    rows = []
+    for index, name in enumerate(account_names[:4]):
+        user = USERS[name]
+        rows.append(make_row(
+            start_time + timedelta(seconds=index * 20), name, source_ip,
+            user["location"], user["device"], "failed", 1, label="anomaly",
+        ))
+    return rows
+
+
 def main():
     names = list(USERS)
 
@@ -269,6 +284,14 @@ def main():
     # Generate four rapid-login bursts
     for _ in range(4):
         rows += make_rapid_rows(random.choice(names))
+
+    # Three campaigns touch four accounts once each from a shared source.
+    # This tests cross-account correlation rather than per-user failure counts.
+    for campaign in range(3):
+        spray_time = START_DATE + timedelta(days=campaign + 20, hours=12)
+        rows += make_password_spray_rows(
+            names, f"198.51.100.{210 + campaign}", spray_time
+        )
 
     df = pd.DataFrame(rows)
     df = df.sort_values("timestamp").reset_index(drop=True)
