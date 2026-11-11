@@ -5,6 +5,7 @@ from src.stress_test_evaluation import (
     build_stress_scenarios,
     build_error_audit,
     evaluate_scenario_detection,
+    build_scenario_recall_audit,
     evaluate_stress_test,
 )
 
@@ -232,3 +233,18 @@ def test_error_audit_lists_false_positives_and_false_negatives():
     assert ((audit["detector"] == "rules") & (audit["error_type"] == "false_positive")).sum() == 1
     assert ((audit["detector"] == "rules") & (audit["error_type"] == "false_negative")).sum() == 1
 
+
+
+def test_scenario_recall_audit_identifies_missed_attack_events():
+    rows = pd.DataFrame([
+        {"scenario": "brute_force", "true_label": "anomaly", "rule_prediction": "anomaly", "ml_prediction": "normal", "hybrid_prediction": "anomaly"},
+        {"scenario": "brute_force", "true_label": "anomaly", "rule_prediction": "anomaly", "ml_prediction": "anomaly", "hybrid_prediction": "anomaly"},
+        {"scenario": "password_spray", "true_label": "anomaly", "rule_prediction": "anomaly", "ml_prediction": "normal", "hybrid_prediction": "anomaly"},
+    ])
+    audit = build_scenario_recall_audit(rows)
+    ml_spray = audit[(audit["detector"] == "ml") & (audit["scenario"] == "password_spray")].iloc[0]
+    hybrid_spray = audit[(audit["detector"] == "hybrid") & (audit["scenario"] == "password_spray")].iloc[0]
+    assert ml_spray["event_recall"] == 0.0
+    assert ml_spray["missed_events"] == 1
+    assert not ml_spray["scenario_detected"]
+    assert hybrid_spray["event_recall"] == 1.0
