@@ -123,7 +123,7 @@ data/login_logs.csv
 
 The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,579 records** over 30 days for four users in the current generator version. The fixed random seed makes generation reproducible. The dataset contains **1,500 normal rows and 79 anomaly-labelled rows** (about 5% anomalies).
+`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users in the current seeded generation: **1,500 normal rows and 88 anomaly-labelled rows** (about 5.5% anomalies). The fixed random seed makes the generated dataset reproducible. Re-run the generator after changing its scenarios or counts, and treat the resulting row/label counts as version-specific.
 
 | Column | Meaning |
 |---|---|
@@ -139,7 +139,7 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 
 **Normal behaviour (1,500 records):** mostly familiar context and working-hour logins, with occasional failed attempts. A small share of benign logins deliberately use a changed IP/device context to ensure novelty alone does not define the label.
 
-**Anomaly-labelled behaviour (79 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
+**Anomaly-labelled behaviour (88 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
 
 ## Detection Methodology
 
@@ -228,25 +228,43 @@ AI-Login-Anomaly-Detector/
 │   └── login_logs.csv
 ├── src/
 │   ├── __init__.py
-│   ├── generate_dataset.py      # creates the synthetic logs
-│   ├── read_dataset.py          # loads and explores logs (Pandas)
-│   ├── preprocessing.py         # cleaning and validation
-│   ├── feature_engineering.py   # turns logs into features
-│   ├── detection_rules.py       # rules, risk scoring, signal explanations
-│   ├── anomaly_detector.py      # Isolation Forest and combined pipeline
-│   ├── evaluate_model.py       # temporal holdout and multi-seed evaluation
-│   ├── audit_label_alignment.py # audits rule/label overlap
+│   ├── generate_dataset.py       # creates the synthetic logs
+│   ├── read_dataset.py           # loads and explores logs
+│   ├── preprocessing.py          # cleaning and validation
+│   ├── feature_engineering.py    # point-in-time behavioural features
+│   ├── detection_rules.py        # rules, risk scoring, signal explanations
+│   ├── anomaly_detector.py       # Isolation Forest and combined pipeline
+│   ├── evaluate_model.py         # temporal and multi-seed evaluation
+│   ├── robust_evaluation.py      # robustness and prediction-overlap experiment
+│   ├── audit_label_alignment.py  # audits synthetic label/rule overlap
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
-│   ├── evaluation_suite.py       # combines audits and evaluation reports
-│   └── utils.py                 # shared file paths
+│   ├── evaluation_suite.py       # combined synthetic evaluation reports
+│   ├── real_world_evaluation.py  # external independently labelled CSV harness
+│   ├── model_comparison.py       # chronological unsupervised model comparison
+│   ├── openssh_ingest.py         # OpenSSH auth.log parsing
+│   ├── api.py                    # FastAPI inference endpoints
+│   ├── api_security.py           # API key and request-rate controls
+│   ├── siem_export.py            # optional Splunk/Elasticsearch forwarding
+│   ├── mitre_mapping.py          # behavioural references to ATT&CK techniques
+│   └── utils.py                  # shared file paths
 ├── models/
 │   └── anomaly_model_v3.pkl
 ├── dashboard/
 │   └── app.py
-├── notebooks/                   # reserved for exploration notebooks
 ├── tests/
+│   ├── test_api.py
+│   ├── test_api_security.py
+│   ├── test_dataset_generation.py
 │   ├── test_detector.py
+│   ├── test_mitre_mapping.py
+│   ├── test_model_comparison.py
+│   ├── test_openssh_ingest.py
+│   ├── test_real_world_evaluation.py
+│   ├── test_siem_export.py
 │   └── test_stress_test_evaluation.py
+├── Dockerfile
+├── docker-compose.yml
+├── Caddyfile
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -396,14 +414,14 @@ The command writes CSV artifacts and `reports/evaluation_report.md` under `repor
 | Cumulative historical baseline | Future events no longer influence past features, but repeated suspicious events can eventually shift the most-common value; production systems need trusted or rolling baselines. |
 | Generated failure counter | `failed_attempts` is recorded by our generator. Real logs require the system to count recent failures itself. |
 | `location_change` is noisy | It also fires when a user returns to their normal location, so it is not used as a rule on its own. |
-| No real infrastructure | There is no real authentication system and no production-scale log ingestion. |
+| No live authentication source | The project does not connect to an organisation's identity provider or production-scale log stream. OpenSSH parsing and a prediction API are provided, but they are not a managed ingestion pipeline. |
 
 A production system would improve these with real log ingestion, per-user baselines built from history, many more features, tuned thresholds, analyst feedback, and regular model retraining.
 
 ## Future Improvements
 
-- Real authentication log ingestion
-- Splunk or other SIEM integration
+- Broader authentication-log ingestion beyond the included OpenSSH parser
+- End-to-end validation against test Splunk and Elasticsearch instances
 - Real-time monitoring
 - Email or chat alert notifications
 - Tune sequence windows against diverse benign and malicious scenarios
