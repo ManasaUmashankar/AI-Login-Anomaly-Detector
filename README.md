@@ -549,7 +549,7 @@ Build and start the API:
 docker compose up --build
 ```
 
-The container exposes port 8000 and mounts the local data and model folders read-only. Visit `http://localhost:8000/docs` for the interactive API docs.
+The API is available on host port **8001** and listens on port **8000** inside the container. The host binding is restricted to `127.0.0.1`; the local data and model folders are mounted read-only. Visit `http://localhost:8001/docs` for the interactive API docs. Host port 8001 is used to avoid conflicts with local services such as Splunk that commonly use port 8000.
 
 
 ### Detection explanations and MITRE ATT&CK
