@@ -381,6 +381,7 @@ The label/rule alignment audit reported **F1 0.5892** for the combined risk-scor
 - [Evaluation guide and metric interpretation](docs/evaluation-guide.md)
 - [Demo walkthrough](docs/demo-walkthrough.md)
 - [SOC Analyst interview notes](docs/interview-notes.md)
+- [Latest verified synthetic evaluation snapshot](docs/latest-synthetic-evaluation.md)
 
 ## Testing
 
