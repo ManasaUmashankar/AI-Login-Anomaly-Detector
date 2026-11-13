@@ -27,3 +27,16 @@ Thumbs.db
 
 # Generated local pytest output (UTF-16 LE; not a test module)
 test-results.txt
+
+# Local backup files
+*.before-cleanup
+*.local-backup
+*.before-regeneration.csv
+
+# Local preview and regenerated datasets
+data/login_logs.preview.csv
+data/login_logs.regenerated-local.csv
+
+# Local generated reports
+reports/
+reports.before-current-dataset/
