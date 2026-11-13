@@ -3,9 +3,18 @@
 Credentials are read only from environment variables. TLS certificate
 verification stays enabled. Failures are returned to the caller for safe logging.
 """
+from datetime import datetime, timezone
 import os
 
 import requests
+
+
+def _splunk_epoch_time(timestamp):
+    """Convert an ISO-8601 timestamp to the numeric epoch required by Splunk HEC."""
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
 
 
 def build_siem_event(prediction):
@@ -47,7 +56,7 @@ def forward_to_splunk(event, *, url=None, token=None, timeout=None):
         endpoint.rstrip("/") + "/services/collector/event",
         headers={"Authorization": f"Splunk {secret}"},
         json={
-            "time": event["@timestamp"],
+            "time": _splunk_epoch_time(event["@timestamp"]),
             "sourcetype": "ai_login_anomaly_detector",
             "source": "ai-login-anomaly-detector",
             "event": event,
