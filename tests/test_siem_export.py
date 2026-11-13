@@ -27,7 +27,7 @@ def test_build_siem_event_has_authentication_fields(event):
     assert result["risk"]["level"] == "High"
 
 
-def test_splunk_hec_uses_token_and_verified_tls(monkeypatch, event):
+def test_splunk_hec_uses_epoch_time_token_and_verified_tls(monkeypatch, event):
     import src.siem_export as module
 
     captured = {}
@@ -45,7 +45,29 @@ def test_splunk_hec_uses_token_and_verified_tls(monkeypatch, event):
     assert forward_to_splunk(build_siem_event(event), url="https://splunk.example", token="secret") == 200
     assert captured["url"] == "https://splunk.example/services/collector/event"
     assert captured["headers"]["Authorization"] == "Splunk secret"
+    assert captured["json"]["time"] == pytest.approx(1794304800.0)
+    assert isinstance(captured["json"]["time"], float)
     assert captured["verify"] is True
+
+
+def test_splunk_hec_normalizes_offset_aware_timestamp(monkeypatch, event):
+    import src.siem_export as module
+
+    captured = {}
+
+    class Response:
+        status_code = 200
+        def raise_for_status(self):
+            pass
+
+    def fake_post(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+    event["timestamp"] = "2026-11-10T15:30:00+05:30"
+    forward_to_splunk(build_siem_event(event), url="https://splunk.example", token="secret")
+    assert captured["json"]["time"] == pytest.approx(1794304800.0)
 
 
 def test_elasticsearch_uses_api_key_and_verified_tls(monkeypatch, event):
