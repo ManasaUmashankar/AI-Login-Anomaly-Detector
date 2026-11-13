@@ -600,7 +600,7 @@ The parser deliberately sets location and device to `unknown`; it does not inven
 
 ### API authentication, rate limiting and SIEM forwarding
 
-The prediction endpoint now requires an API key in the `X-API-Key` header. If `DETECTOR_API_KEY` is not configured, prediction requests fail closed with HTTP 503. A per-client in-memory sliding-window limiter returns HTTP 429 when the configured threshold is reached. The limiter is per process and keys off the immediate TCP peer. When all requests pass through one reverse proxy, they can share that proxy's bucket; use a trusted gateway that applies client-aware rate limiting or a shared Redis-backed limiter for multi-worker/multi-instance deployments.
+The prediction endpoint now requires an API key in the `X-API-Key` header. If `DETECTOR_API_KEY` is not configured, prediction requests fail closed with HTTP 503. A per-client in-memory sliding-window limiter returns HTTP 429 when the configured threshold is reached. By default, it keys off the immediate TCP peer and ignores forwarded headers. If the API is reachable exclusively through a reverse proxy you control, set `DETECTOR_TRUSTED_PROXY_CIDRS` to that proxy's source CIDR(s); only requests whose immediate peer belongs to those networks may use the right-most IP in `X-Forwarded-For`. Do not trust arbitrary forwarded headers or expose the API directly to untrusted clients when enabling this setting. The limiter remains per-process and in-memory; use a shared Redis-backed limiter or trusted gateway enforcement for multi-worker/multi-instance deployments.
 
 Optional event forwarding supports:
 
