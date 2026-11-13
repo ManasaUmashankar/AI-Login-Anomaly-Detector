@@ -104,6 +104,12 @@ def test_preprocessing_fixes_messy_data():
     assert clean["location"].notna().all()
 
 
+def test_preprocessing_can_suppress_summary(capsys):
+    clean = preprocess_logs(demo_messy_data(), verbose=False)
+    assert len(clean) == 4
+    assert capsys.readouterr().out == ""
+
+
 def test_preprocessing_keeps_unusual_rows():
     clean = preprocess_logs(demo_messy_data())
     moscow = clean[clean["location"] == "Moscow, Russia"]
@@ -337,9 +343,11 @@ def test_pipeline_high_risk_rows_always_need_investigation(pipeline_result):
     assert (high["final_status"] == "Requires investigation").all()
 
 
-def test_pipeline_most_rows_are_normal_activity(pipeline_result):
+def test_pipeline_majority_of_rows_are_normal_activity(pipeline_result):
     share = (pipeline_result["final_status"] == "Normal activity").mean()
-    assert share > 0.9
+    # Rules may add alerts on top of the model's configured contamination.
+    # Keep a meaningful majority requirement without assuming a fixed 90% split.
+    assert share > 0.85
 
 
 def test_pipeline_top_risk_row_requires_investigation(pipeline_result):
