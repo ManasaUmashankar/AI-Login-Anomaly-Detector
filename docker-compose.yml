@@ -13,7 +13,7 @@ services:
       ELASTICSEARCH_API_KEY: ${ELASTICSEARCH_API_KEY:-}
       ELASTICSEARCH_INDEX: ${ELASTICSEARCH_INDEX:-ai-login-anomaly-detector}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - ./data:/app/data:ro
       - ./models:/app/models:ro
