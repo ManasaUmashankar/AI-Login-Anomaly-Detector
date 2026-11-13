@@ -1,10 +1,10 @@
 # Latest Synthetic Evaluation Snapshot
 
 **Run date:** 2026-11-13  
-**GitHub Actions run:** [Synthetic evaluation report #2](https://github.com/ManasaUmashankar/AI-Login-Anomaly-Detector/actions/runs/43376330388)  
-**Commit:** `c5350778d3a5a4511de6a94891f7234eed818d8c`  
+**GitHub Actions run:** [Synthetic evaluation report #43377124172](https://github.com/ManasaUmashankar/AI-Login-Anomaly-Detector/actions/runs/43377124172)  
+**Commit:** `eaf14a594b88be37e712c96b09d194247554dcfb`  
 **Dataset:** 1,588 synthetic login events (1,500 normal; 88 anomaly-labelled)  
-**CI result:** 114 tests passed; consolidated evaluation and artifact upload completed successfully.
+**CI result:** 114 tests passed; Docker image build, consolidated evaluation, and artifact upload completed successfully. The test run emitted three warnings; none failed the workflow.
 
 > These results are synthetic engineering diagnostics. They are not a real-world benchmark and do not establish production SOC effectiveness.
 
@@ -37,7 +37,7 @@ Scenario-level results are different because a scenario is counted as detected i
 | Rule baseline | 0.7500 | 1.0000 | 0.8571 | 6 | 2 | 0 | 5 |
 | Hybrid (ML OR rules) | 0.7500 | 1.0000 | 0.8571 | 6 | 2 | 0 | 5 |
 
-The stress test contains 24 clearly anomaly-labelled events, 10 clearly benign-labelled events, and 17 ambiguous events. The scenario-level recall should not be mistaken for event-level recall: catching one event in a sequence does not mean every suspicious event was caught.
+The stress test contains **24 clearly anomaly-labelled events, 21 clearly benign-labelled events, and 17 ambiguous events**. The 45 clearly labelled events are the population used for the event-level binary metrics. The scenario-level recall should not be mistaken for event-level recall: catching one event in a sequence does not mean every suspicious event was caught.
 
 ## Label/rule alignment
 
@@ -59,4 +59,4 @@ python -m pytest -q
 python -m src.evaluation_suite
 ```
 
-The full CSV and Markdown outputs are retained in the GitHub Actions artifact named `synthetic-evaluation-report` for 30 days after the run. See the linked workflow run for the exact CI execution.
+The full CSV and Markdown outputs are retained in the GitHub Actions artifact named `synthetic-evaluation-report`. See the linked workflow run for the exact CI execution and artifact.
