@@ -3,6 +3,8 @@
 This stress test is separate from the original generated labels. It is a controlled
 engineering diagnostic, not a substitute for evaluation on real authentication logs.
 """
+from pathlib import Path
+
 import pandas as pd
 
 from src.anomaly_detector import apply_model, train_model
@@ -95,6 +97,24 @@ def build_stress_scenarios(history):
             scenario="benign_successes_spread_out",
         )
 
+    # Hard negatives deliberately cross existing rule thresholds while remaining
+    # benign by scenario design: user typos and repeated legitimate page refreshes.
+    for attempt in range(1, 6):
+        emit(
+            p1, minutes=140 + attempt * 2, status="failed",
+            failures=attempt, label="normal",
+            scenario="benign_password_typos_then_success",
+        )
+    emit(
+        p1, minutes=152, status="success", failures=5, label="normal",
+        scenario="benign_password_typos_then_success",
+    )
+    for attempt in range(5):
+        emit(
+            p2, minutes=170, seconds=attempt * 45, status="success",
+            label="normal", scenario="benign_rapid_successes_familiar_context",
+        )
+
     # Ambiguous cases resemble suspicious patterns, so do not force a benign/attack label.
     # Their alerts are reported separately and excluded from binary performance metrics.
     for attempt in range(6):
@@ -176,7 +196,7 @@ def evaluate_stress_test(history=None):
     historical = history.copy()
     historical["timestamp"] = pd.to_datetime(historical["timestamp"], errors="coerce")
     historical = historical.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
-    historical = preprocess_logs(historical)
+    historical = preprocess_logs(historical, verbose=False)
     historical_features = build_features(historical)
 
     stress = build_stress_scenarios(historical_features)
@@ -279,6 +299,71 @@ def evaluate_scenario_detection(rows):
     return metrics, scenario_summary
 
 
+
+def build_scenario_recall_audit(rows):
+    """Break event-level attack recall down by scenario and detector."""
+    required = {"scenario", "true_label", "rule_prediction", "ml_prediction"}
+    missing = sorted(required - set(rows.columns))
+    if missing:
+        raise ValueError(f"Stress results are missing required columns: {missing}")
+    detectors = {"rules": "rule_prediction", "ml": "ml_prediction", "hybrid": "hybrid_prediction"}
+    records = []
+    attacks = rows[rows["true_label"].eq("anomaly")]
+    for scenario, group in attacks.groupby("scenario", sort=True):
+        for detector, column in detectors.items():
+            if column not in group.columns:
+                continue
+            detected = int(group[column].eq("anomaly").sum())
+            support = int(len(group))
+            records.append({"detector": detector, "scenario": scenario,
+                "attack_events": support, "detected_events": detected,
+                "missed_events": support - detected,
+                "event_recall": detected / support if support else 0.0,
+                "scenario_detected": detected > 0})
+    return pd.DataFrame(records, columns=["detector", "scenario", "attack_events",
+        "detected_events", "missed_events", "event_recall", "scenario_detected"])
+
+def build_error_audit(rows):
+    """Return per-event false positives and false negatives for each detector."""
+    required = {"scenario", "true_label", "rule_prediction", "ml_prediction"}
+    missing = sorted(required - set(rows.columns))
+    if missing:
+        raise ValueError(f"Stress results are missing required columns: {missing}")
+    records = []
+    detectors = {
+        "rules": "rule_prediction",
+        "ml": "ml_prediction",
+        "hybrid": "hybrid_prediction",
+    }
+    known = rows[rows["true_label"].isin(["normal", "anomaly"])]
+    for detector, column in detectors.items():
+        if column not in known.columns:
+            continue
+        mismatch = known[column].ne(known["true_label"])
+        for _, row in known.loc[mismatch].iterrows():
+            records.append({
+                "detector": detector,
+                "error_type": "false_positive" if row["true_label"] == "normal" else "false_negative",
+                "scenario": row["scenario"],
+                "true_label": row["true_label"],
+                "prediction": row[column],
+                "timestamp": row["timestamp"],
+                "username": row["username"],
+                "ip_address": row["ip_address"],
+                "login_status": row["login_status"],
+                "failed_logins_45m": row["failed_logins_45m"],
+                "successful_logins_5m": row["successful_logins_5m"],
+                "risk_score": row["risk_score"],
+                "ml_anomaly_score": row["ml_anomaly_score"],
+            })
+    return pd.DataFrame(records, columns=[
+        "detector", "error_type", "scenario", "true_label", "prediction",
+        "timestamp", "username", "ip_address", "login_status",
+        "failed_logins_45m", "successful_logins_5m", "risk_score",
+        "ml_anomaly_score",
+    ])
+
+
 def _print_metrics(name, metrics):
     print(
         f"{name:12s} precision={metrics['precision']:.3f} "
@@ -291,6 +376,21 @@ def _print_metrics(name, metrics):
 
 def main():
     summary, rows = evaluate_stress_test()
+    scenario_metrics, scenario_rows = evaluate_scenario_detection(rows)
+    output_dir = Path("reports")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    event_report = output_dir / "stress-test-event-outcomes.csv"
+    scenario_report = output_dir / "stress-test-scenario-outcomes.csv"
+    error_report = output_dir / "stress-test-errors.csv"
+    rows.to_csv(event_report, index=False)
+    scenario_rows.to_csv(scenario_report, index=False)
+    build_error_audit(rows).to_csv(error_report, index=False)
+    recall_report = output_dir / "stress-test-scenario-recall.csv"
+    build_scenario_recall_audit(rows).to_csv(recall_report, index=False)
+    print(f"Event outcomes: {event_report}")
+    print(f"Scenario outcomes: {scenario_report}")
+    print(f"False-positive / false-negative audit: {error_report}")
+    print(f"Per-scenario attack recall audit: {recall_report}")
     print("\n========== SYNTHETIC EDGE-CASE STRESS TEST ==========")
     print("Model trained on historical rows only; stress scenarios are held out.")
     print("All cases are synthetic and deliberately selected, not a real-world benchmark.")
@@ -298,7 +398,6 @@ def main():
     _print_metrics("ML model", summary["ml"])
     _print_metrics("Rule baseline", summary["rules"])
     _print_metrics("Hybrid detector", summary["hybrid"])
-    scenario_metrics, scenario_rows = evaluate_scenario_detection(rows)
     print("\n========== SCENARIO-LEVEL DETECTION ==========")
     print("Each complete sequence counts once; delay is the event position of the first alert.")
     _print_metrics("ML scenarios", scenario_metrics["ml"])

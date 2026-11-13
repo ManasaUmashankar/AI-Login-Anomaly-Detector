@@ -1,3 +1,5 @@
+from collections import Counter, deque
+
 import pandas as pd
 
 from src.preprocessing import preprocess_logs
@@ -24,7 +26,7 @@ NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + [
 def add_time_features(df):
     """Hour, weekday, and an 'unusual hour' flag."""
     df["login_hour"] = df["timestamp"].dt.hour
-    df["day_of_week"] = df["timestamp"].dt.dayofweek   # 0 = Monday
+    df["day_of_week"] = df["timestamp"].dt.day_of_week   # 0 = Monday
     too_early = df["login_hour"] < UNUSUAL_BEFORE_HOUR
     too_late = df["login_hour"] >= UNUSUAL_FROM_HOUR
     df["is_unusual_hour"] = (too_early | too_late).astype(int)
@@ -43,21 +45,27 @@ def add_difference_from_usual(df, column, new_name):
 
     for _, user_group in ordered.groupby("username", sort=False):
         history = {}
+        usual_value = None
+        usual_count = 0
         # Process equal timestamps as a batch to avoid order-dependent leakage.
         for _, batch in user_group.groupby("timestamp", sort=True):
             if history:
-                # Break frequency ties by a stable value ordering, not input row order.
-                usual_value = min(
-                    history,
-                    key=lambda value: (-history[value], str(value)),
-                )
                 flags.loc[batch.index] = (
                     batch[column] != usual_value
                 ).astype("int64")
 
-            # Only make this timestamp available to later events.
-            for value in batch[column].tolist():
-                history[value] = history.get(value, 0) + 1
+            # Update the running mode incrementally: avoid scanning the entire
+            # history for every timestamp (quadratic behaviour on long histories).
+            batch_counts = batch[column].value_counts(dropna=False, sort=False)
+            for value, increment in batch_counts.items():
+                count = history.get(value, 0) + int(increment)
+                history[value] = count
+                if (
+                    count > usual_count
+                    or (count == usual_count and (usual_value is None or str(value) < str(usual_value)))
+                ):
+                    usual_value = value
+                    usual_count = count
 
     df[new_name] = flags
     return df
@@ -101,15 +109,13 @@ def add_login_frequency(df):
     ordered = df.sort_values(["username", "timestamp"], kind="stable")
 
     for _, user_group in ordered.groupby("username", sort=False):
-        prior_times = []
+        prior_times = deque()
         for _, batch in user_group.groupby("timestamp", sort=True):
             current = batch["timestamp"].iloc[0]
-            prior_times = [
-                timestamp for timestamp in prior_times
-                if current - timestamp <= window
-            ]
+            while prior_times and current - prior_times[0] > window:
+                prior_times.popleft()
             frequency.loc[batch.index] = len(prior_times) + len(batch)
-            prior_times.extend(batch["timestamp"].tolist())
+            prior_times.extend([current] * len(batch))
 
     df["login_frequency"] = frequency
     return df
@@ -128,18 +134,14 @@ def add_login_status_windows(df):
     ordered = df.sort_values(["username", "timestamp"], kind="stable")
 
     for _, user_group in ordered.groupby("username", sort=False):
-        prior_failed = []
-        prior_success = []
+        prior_failed = deque()
+        prior_success = deque()
         for _, batch in user_group.groupby("timestamp", sort=True):
             current = batch["timestamp"].iloc[0]
-            prior_failed = [
-                timestamp for timestamp in prior_failed
-                if current - timestamp <= failed_window
-            ]
-            prior_success = [
-                timestamp for timestamp in prior_success
-                if current - timestamp <= success_window
-            ]
+            while prior_failed and current - prior_failed[0] > failed_window:
+                prior_failed.popleft()
+            while prior_success and current - prior_success[0] > success_window:
+                prior_success.popleft()
             batch_failed = batch.loc[batch["login_status"] == "failed", "timestamp"].tolist()
             batch_success = batch.loc[batch["login_status"] == "success", "timestamp"].tolist()
             failed_counts.loc[batch.index] = len(prior_failed) + len(batch_failed)
@@ -165,35 +167,43 @@ def add_failed_users_per_ip_window(df):
     ordered = df.sort_values(["ip_address", "timestamp"], kind="stable")
 
     for _, ip_group in ordered.groupby("ip_address", sort=False):
-        prior_failures = []
+        prior_failures = deque()
+        active_users = Counter()
         for _, batch in ip_group.groupby("timestamp", sort=True):
             current = batch["timestamp"].iloc[0]
-            prior_failures = [
-                (timestamp, username)
-                for timestamp, username in prior_failures
-                if current - timestamp <= window
-            ]
+            while prior_failures and current - prior_failures[0][0] > window:
+                _expired_time, expired_user = prior_failures.popleft()
+                active_users[expired_user] -= 1
+                if active_users[expired_user] <= 0:
+                    del active_users[expired_user]
+
             current_failed_users = set(
                 batch.loc[batch["login_status"] == "failed", "username"].tolist()
             )
-            distinct_users = {username for _, username in prior_failures}
-            distinct_users.update(current_failed_users)
-            counts.loc[batch.index] = len(distinct_users)
+            counts.loc[batch.index] = len(set(active_users).union(current_failed_users))
 
-            prior_failures.extend(
-                (current, username)
-                for username in batch.loc[
-                    batch["login_status"] == "failed", "username"
-                ].tolist()
-            )
+            for username in current_failed_users:
+                prior_failures.append((current, username))
+                active_users[username] += 1
 
     df["distinct_failed_users_per_ip_15m"] = counts
     return df
 
 
 def build_features(df):
-    """Add all model features using strictly historical, timestamp-safe baselines."""
+    """Add timestamp-safe features using prior history and the current timestamp batch.
+
+    Historical baseline features use strictly earlier timestamps. Rolling count
+    features include the current timestamp batch, so simultaneous events share
+    the same batch-level counts independent of row order.
+    """
     df = df.copy()
+    # Pandas Arrow-backed strings can make repeated scalar comparisons inside
+    # timestamp batches disproportionately expensive. Convert the small set
+    # of categorical inputs once, rather than paying that conversion per batch.
+    for column in ("username", "ip_address", "device", "location", "login_status"):
+        if column in df.columns:
+            df[column] = df[column].astype(object)
     df = df.sort_values("timestamp", kind="stable").reset_index(drop=True)
     df = add_time_features(df)
     df = add_difference_from_usual(df, "ip_address", "is_new_ip")

@@ -3,7 +3,9 @@ import pandas as pd
 from src.preprocessing import REQUIRED_COLUMNS
 from src.stress_test_evaluation import (
     build_stress_scenarios,
+    build_error_audit,
     evaluate_scenario_detection,
+    build_scenario_recall_audit,
     evaluate_stress_test,
 )
 
@@ -30,12 +32,12 @@ def make_history():
 def test_stress_scenarios_keep_benign_and_anomaly_labels_separate():
     stress = build_stress_scenarios(make_history())
 
-    assert len(stress) == 51
+    assert len(stress) == 62
     assert set(stress["true_label"]) == {"normal", "anomaly", "ambiguous"}
     benign = stress[stress["scenario"].str.startswith("benign_")]
     ambiguous = stress[stress["scenario"].str.startswith("ambiguous_")]
     suspicious = stress[stress["scenario"].str.startswith("anomaly_")]
-    assert len(benign) == 10
+    assert len(benign) == 21
     assert len(ambiguous) == 17
     assert len(suspicious) == 24
     assert benign["true_label"].eq("normal").all()
@@ -191,3 +193,58 @@ def test_stress_evaluation_returns_finite_model_scores_and_rolling_diagnostics()
     assert rows["ml_anomaly_score"].notna().all()
     assert rows["failed_logins_45m"].notna().all()
     assert rows["successful_logins_5m"].notna().all()
+
+def test_hard_negative_benign_scenarios_cross_rule_thresholds():
+    stress = build_stress_scenarios(make_history())
+    typos = stress[stress["scenario"] == "benign_password_typos_then_success"]
+    rapid = stress[stress["scenario"] == "benign_rapid_successes_familiar_context"]
+
+    assert len(typos) == 6
+    assert typos["true_label"].eq("normal").all()
+    assert typos["login_status"].tolist() == ["failed"] * 5 + ["success"]
+    assert typos["failed_attempts"].max() == 5
+
+    assert len(rapid) == 5
+    assert rapid["true_label"].eq("normal").all()
+    assert rapid["login_status"].eq("success").all()
+    assert rapid["timestamp"].diff().dropna().dt.total_seconds().eq(45).all()
+
+
+def test_error_audit_lists_false_positives_and_false_negatives():
+    rows = pd.DataFrame([
+        {"scenario": "benign_case", "true_label": "normal",
+         "rule_prediction": "anomaly", "ml_prediction": "normal",
+         "hybrid_prediction": "anomaly", "timestamp": pd.Timestamp("2026-01-01"),
+         "username": "a", "ip_address": "192.0.2.1", "login_status": "failed",
+         "failed_logins_45m": 5, "successful_logins_5m": 0,
+         "risk_score": 3, "ml_anomaly_score": 0.1},
+        {"scenario": "attack_case", "true_label": "anomaly",
+         "rule_prediction": "normal", "ml_prediction": "anomaly",
+         "hybrid_prediction": "anomaly", "timestamp": pd.Timestamp("2026-01-02"),
+         "username": "b", "ip_address": "192.0.2.2", "login_status": "success",
+         "failed_logins_45m": 0, "successful_logins_5m": 1,
+         "risk_score": 0, "ml_anomaly_score": -0.1},
+    ])
+
+    audit = build_error_audit(rows)
+    # The ML predictions are correct for both rows, so the error-only audit
+    # correctly has no ML rows. It should still retain errors from rules/hybrid.
+    assert set(audit["detector"]) == {"rules", "hybrid"}
+    assert ((audit["detector"] == "rules") & (audit["error_type"] == "false_positive")).sum() == 1
+    assert ((audit["detector"] == "rules") & (audit["error_type"] == "false_negative")).sum() == 1
+
+
+
+def test_scenario_recall_audit_identifies_missed_attack_events():
+    rows = pd.DataFrame([
+        {"scenario": "brute_force", "true_label": "anomaly", "rule_prediction": "anomaly", "ml_prediction": "normal", "hybrid_prediction": "anomaly"},
+        {"scenario": "brute_force", "true_label": "anomaly", "rule_prediction": "anomaly", "ml_prediction": "anomaly", "hybrid_prediction": "anomaly"},
+        {"scenario": "password_spray", "true_label": "anomaly", "rule_prediction": "anomaly", "ml_prediction": "normal", "hybrid_prediction": "anomaly"},
+    ])
+    audit = build_scenario_recall_audit(rows)
+    ml_spray = audit[(audit["detector"] == "ml") & (audit["scenario"] == "password_spray")].iloc[0]
+    hybrid_spray = audit[(audit["detector"] == "hybrid") & (audit["scenario"] == "password_spray")].iloc[0]
+    assert ml_spray["event_recall"] == 0.0
+    assert ml_spray["missed_events"] == 1
+    assert not ml_spray["scenario_detected"]
+    assert hybrid_spray["event_recall"] == 1.0
