@@ -27,3 +27,19 @@ def test_attack_generator_can_reuse_a_users_familiar_context():
         for row in rows
     )
     assert all(row["true_label"] == "anomaly" for row in rows)
+
+
+
+def test_password_spray_generator_spreads_single_failures_across_accounts():
+    from datetime import datetime
+
+    rows = generate_dataset.make_password_spray_rows(
+        list(generate_dataset.USERS), "198.51.100.210",
+        datetime(2026, 9, 21, 12, 0, 0),
+    )
+    assert len(rows) == 4
+    assert len({row["username"] for row in rows}) == 4
+    assert {row["ip_address"] for row in rows} == {"198.51.100.210"}
+    assert {row["login_status"] for row in rows} == {"failed"}
+    assert {row["failed_attempts"] for row in rows} == {1}
+    assert {row["true_label"] for row in rows} == {"anomaly"}

@@ -26,7 +26,7 @@ NEW_COLUMNS = ["login_hour", "day_of_week"] + FLAG_COLUMNS + [
 def add_time_features(df):
     """Hour, weekday, and an 'unusual hour' flag."""
     df["login_hour"] = df["timestamp"].dt.hour
-    df["day_of_week"] = df["timestamp"].dt.dayofweek   # 0 = Monday
+    df["day_of_week"] = df["timestamp"].dt.day_of_week   # 0 = Monday
     too_early = df["login_hour"] < UNUSUAL_BEFORE_HOUR
     too_late = df["login_hour"] >= UNUSUAL_FROM_HOUR
     df["is_unusual_hour"] = (too_early | too_late).astype(int)
@@ -191,7 +191,12 @@ def add_failed_users_per_ip_window(df):
 
 
 def build_features(df):
-    """Add all model features using strictly historical, timestamp-safe baselines."""
+    """Add timestamp-safe features using prior history and the current timestamp batch.
+
+    Historical baseline features use strictly earlier timestamps. Rolling count
+    features include the current timestamp batch, so simultaneous events share
+    the same batch-level counts independent of row order.
+    """
     df = df.copy()
     # Pandas Arrow-backed strings can make repeated scalar comparisons inside
     # timestamp batches disproportionately expensive. Convert the small set

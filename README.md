@@ -123,7 +123,7 @@ data/login_logs.csv
 
 The dataset is **synthetic**. No real passwords, credentials, or personal data are used, and the IP addresses come from ranges reserved for documentation (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`).
 
-`src/generate_dataset.py` creates `data/login_logs.csv` with **1,579 records** over 30 days for four users in the current generator version. The fixed random seed makes generation reproducible. The dataset contains **1,500 normal rows and 79 anomaly-labelled rows** (about 5% anomalies).
+`src/generate_dataset.py` creates `data/login_logs.csv` with **1,588 records** over 30 days for four users in the current seeded generation: **1,500 normal rows and 88 anomaly-labelled rows** (about 5.5% anomalies). The fixed random seed makes the generated dataset reproducible. Re-run the generator after changing its scenarios or counts, and treat the resulting row/label counts as version-specific.
 
 | Column | Meaning |
 |---|---|
@@ -139,7 +139,7 @@ The dataset is **synthetic**. No real passwords, credentials, or personal data a
 
 **Normal behaviour (1,500 records):** mostly familiar context and working-hour logins, with occasional failed attempts. A small share of benign logins deliberately use a changed IP/device context to ensure novelty alone does not define the label.
 
-**Anomaly-labelled behaviour (79 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
+**Anomaly-labelled behaviour (88 records in the current seeded generation):** brute-force-style sequences, unusual-hour successful logins, and rapid-login bursts. Some anomalous scenarios deliberately reuse familiar IP/device/location context, so a single categorical field should not be treated as proof of an attack. Exact scenario row counts vary with the seeded random sequence and generator version.
 
 ## Detection Methodology
 
@@ -228,25 +228,43 @@ AI-Login-Anomaly-Detector/
 │   └── login_logs.csv
 ├── src/
 │   ├── __init__.py
-│   ├── generate_dataset.py      # creates the synthetic logs
-│   ├── read_dataset.py          # loads and explores logs (Pandas)
-│   ├── preprocessing.py         # cleaning and validation
-│   ├── feature_engineering.py   # turns logs into features
-│   ├── detection_rules.py       # rules, risk scoring, signal explanations
-│   ├── anomaly_detector.py      # Isolation Forest and combined pipeline
-│   ├── evaluate_model.py       # temporal holdout and multi-seed evaluation
-│   ├── audit_label_alignment.py # audits rule/label overlap
+│   ├── generate_dataset.py       # creates the synthetic logs
+│   ├── read_dataset.py           # loads and explores logs
+│   ├── preprocessing.py          # cleaning and validation
+│   ├── feature_engineering.py    # point-in-time behavioural features
+│   ├── detection_rules.py        # rules, risk scoring, signal explanations
+│   ├── anomaly_detector.py       # Isolation Forest and combined pipeline
+│   ├── evaluate_model.py         # temporal and multi-seed evaluation
+│   ├── robust_evaluation.py      # robustness and prediction-overlap experiment
+│   ├── audit_label_alignment.py  # audits synthetic label/rule overlap
 │   ├── stress_test_evaluation.py # controlled edge-case stress evaluation
-│   ├── evaluation_suite.py       # combines audits and evaluation reports
-│   └── utils.py                 # shared file paths
+│   ├── evaluation_suite.py       # combined synthetic evaluation reports
+│   ├── real_world_evaluation.py  # external independently labelled CSV harness
+│   ├── model_comparison.py       # chronological unsupervised model comparison
+│   ├── openssh_ingest.py         # OpenSSH auth.log parsing
+│   ├── api.py                    # FastAPI inference endpoints
+│   ├── api_security.py           # API key and request-rate controls
+│   ├── siem_export.py            # optional Splunk/Elasticsearch forwarding
+│   ├── mitre_mapping.py          # behavioural references to ATT&CK techniques
+│   └── utils.py                  # shared file paths
 ├── models/
 │   └── anomaly_model_v3.pkl
 ├── dashboard/
 │   └── app.py
-├── notebooks/                   # reserved for exploration notebooks
 ├── tests/
+│   ├── test_api.py
+│   ├── test_api_security.py
+│   ├── test_dataset_generation.py
 │   ├── test_detector.py
+│   ├── test_mitre_mapping.py
+│   ├── test_model_comparison.py
+│   ├── test_openssh_ingest.py
+│   ├── test_real_world_evaluation.py
+│   ├── test_siem_export.py
 │   └── test_stress_test_evaluation.py
+├── Dockerfile
+├── docker-compose.yml
+├── Caddyfile
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -299,16 +317,24 @@ Exact labels and counts can change with the dataset and pipeline output. The das
 
 ## Dashboard Screenshots
 
-The screenshot files referenced in an earlier version of this README are not currently present in the repository. To avoid broken image links or implying that screenshots have been verified, this section will be populated after fresh screenshots are captured from the current Streamlit dashboard.
+The following captures show the local Streamlit prototype running on synthetic authentication data. They are interface examples, not evidence of live monitoring or production detection performance.
 
-Recommended screenshots to add under `docs/images/`:
+### Security overview
 
-- `dashboard-overview.jpg` — overview metrics and authentication trends
-- `alert-queue.jpg` — alert queue with risk scores and severity
-- `severity-filter.jpg` — the alert table with the relevant severity filter visibly applied
-- `alert-investigation.jpg` — selected event details and detection reasons
+![Dashboard overview](docs/images/dashboard-overview.png)
 
-Only include screenshots that actually match the described view. Use synthetic data and avoid exposing credentials, tokens, or personal information.
+### Analyst alert queue
+
+![Analyst alert queue](docs/images/analyst-alert-queue.png)
+
+### Event investigation
+
+![Event investigation](docs/images/event-investigation.png)
+
+### Filtered dashboard
+
+![Filtered dashboard](docs/images/filtered-dashboard.png)
+
 
 ## Example Output
 
@@ -336,33 +362,35 @@ Run the robustness experiment with `python -m src.robust_evaluation --seeds 20 -
 
 The model is fitted only on rows earlier than each holdout window; ground-truth labels are used only to score predictions. Features are built chronologically so later events do not define earlier user baselines. The per-window mean is an unweighted average of window metrics, not a pooled metric. Some windows may contain very few planted anomalies, so interpret each metric alongside its support and confusion matrix. All results describe this synthetic dataset and are not a real-world benchmark.
 
-## Historical Evaluation Snapshot (2026-10-27)
+## Evaluation Results and Reproducibility
 
-The following figures are retained as a historical record only. They were produced from an earlier 1,579-row dataset (1,500 normal; 79 anomaly-labelled rows) and do not describe the currently restored 1,588-row dataset. Do not use these values as the current project metrics. Regenerate and review `reports/evaluation_report.md` and the robustness reports before publishing a new snapshot.
+Evaluation numbers are deliberately **not hard-coded here**. The dataset, generator, feature engineering, model, and evaluation code can change; a metric without its exact code revision and dataset version is easy to misrepresent.
 
-| Metric | Isolation Forest | Rule baseline |
-|---|---:|---:|
-| Mean F1-score | 0.7782 | 0.4813 |
-| Mean precision | 0.7421 | 0.3596 |
-| Mean recall | 0.8952 | 0.9306 |
-| Mean false-positive rate | 0.0078 | 0.0641 |
-| Mean accuracy | 0.9873 | 0.9335 |
+Run the reproducible suite from the repository root:
 
-Isolation Forest F1 standard deviation was **0.0240**; the rule baseline is deterministic on this dataset. These are averages across seed-level chronological-window metrics, not pooled metrics. Seed variation on one generated dataset does not measure uncertainty across different datasets or real environments.
+```bash
+python -m src.evaluation_suite
+```
 
-In the controlled edge-case stress test, the hybrid (ML OR rules) reached event-level **F1 0.7027 / recall 0.5417** (13 TP, 11 FN, 0 FP); Isolation Forest reached **F1 0.6286 / recall 0.4583** (11 TP, 13 FN, 0 FP); and the rule baseline reached **F1 0.5455 / recall 0.3750** (9 TP, 15 FN, 0 FP). There were 24 clearly anomaly-labelled events and 10 clearly benign-labelled events; 17 ambiguous events were assessed separately and excluded from binary event metrics.
+Review `reports/evaluation_report.md` and the CSV files it generates. For the detailed chronological robustness experiment, run:
 
-At scenario level, the rule baseline and hybrid detected all six labelled anomaly scenarios and raised no alerts on the five benign scenarios; Isolation Forest detected four of six anomaly scenarios. A scenario counts as detected if at least one event in it triggers an alert, so scenario-level recall can be higher than event-level recall.
+```bash
+python -m src.robust_evaluation --seeds 20 --windows 4
+```
 
-The label/rule alignment audit reported **F1 0.5892** for the combined risk-score threshold (score >= 3), with precision **0.4383**, recall **0.8987**, and false-positive rate **0.0607**. The password-spray signal had no true positives in the primary dataset, so that pattern still needs stronger coverage in the main generator; it is separately represented in the controlled stress set.
+The GitHub Actions workflow also runs the test suite, builds the API image, generates the consolidated synthetic evaluation, and uploads the reports as a workflow artifact. Use the artifact from the exact commit being reviewed when recording results.
 
-**Interpretation:** these are engineering diagnostics on synthetic, deliberately designed data—not a real-world benchmark. The updated dataset includes more overlap between benign and anomaly contexts, but it remains small and generated by known rules. The results should not be presented as production detection performance. Review `reports/evaluation_report.md` after each run and preserve the run's dataset version and metrics together.
+**Interpretation boundary:** these experiments use a small, generated dataset and hand-designed stress cases. Synthetic labels can share assumptions with detector rules, and stress-test labels are constructed test expectations rather than independently confirmed incidents. High scores therefore do not establish real-world detection performance. The event-level stress test is intentionally retained because it exposes misses and false positives that aggregate chronological metrics can hide. Do not describe any result as production accuracy, SOC effectiveness, or independently validated detection quality.
+
+A stronger future evaluation would use appropriately anonymised authentication logs with labels established independently of this project's generator and rules, with chronological separation between training, validation, and final test data. This is a future validation step, not a release blocker for this educational prototype.
+
 ## Project Documentation
 
 - [Architecture and component flow](docs/architecture.md)
 - [Evaluation guide and metric interpretation](docs/evaluation-guide.md)
 - [Demo walkthrough](docs/demo-walkthrough.md)
 - [SOC Analyst interview notes](docs/interview-notes.md)
+- [Latest verified synthetic evaluation snapshot](docs/latest-synthetic-evaluation.md)
 
 ## Testing
 
@@ -377,6 +405,12 @@ The tests use small hand-made logs with known correct answers, plus checks on th
 Run `python -m src.evaluation_suite` to execute the label/rule alignment audit, 20-seed chronological evaluation, and controlled stress test in one reproducible command. It compares Isolation Forest, the rule baseline, and a diagnostic hybrid on the stress cases, with both event-level and scenario-level metrics. Ambiguous stress cases remain separately reported rather than being silently treated as benign or malicious.
 
 The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. `temporal_window_metrics.csv` preserves seed, window, train/test row counts, chronological boundaries, anomaly support, predictions, and confusion counts. `multi_seed_summary.csv` records seed count, split settings, and aggregation. Inspect label alignment for overlap between synthetic label-generation patterns and detector rules. The report does not overwrite headline metrics in this README; update published snapshots only after reviewing what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
+
+## Automated Evaluation (GitHub Actions)
+
+The `.github/workflows/synthetic-evaluation.yml` workflow runs the full pytest suite and regenerates the consolidated synthetic evaluation when relevant project files change in a pull request. It can also be started manually from the repository's **Actions** tab using **Synthetic evaluation report**.
+
+The generated `reports/` directory is uploaded as a workflow artifact named `synthetic-evaluation-report` and is retained by GitHub Actions for 30 days. Download that artifact to inspect the report and CSV files from the exact CI run. The workflow does not commit generated reports or publish performance numbers automatically; review the dataset, run configuration, and limitations before quoting any metric.
 
 ## Limitations
 
@@ -396,14 +430,14 @@ The command writes CSV artifacts and `reports/evaluation_report.md` under `repor
 | Cumulative historical baseline | Future events no longer influence past features, but repeated suspicious events can eventually shift the most-common value; production systems need trusted or rolling baselines. |
 | Generated failure counter | `failed_attempts` is recorded by our generator. Real logs require the system to count recent failures itself. |
 | `location_change` is noisy | It also fires when a user returns to their normal location, so it is not used as a rule on its own. |
-| No real infrastructure | There is no real authentication system and no production-scale log ingestion. |
+| No live authentication source | The project does not connect to an organisation's identity provider or production-scale log stream. OpenSSH parsing and a prediction API are provided, but they are not a managed ingestion pipeline. |
 
 A production system would improve these with real log ingestion, per-user baselines built from history, many more features, tuned thresholds, analyst feedback, and regular model retraining.
 
 ## Future Improvements
 
-- Real authentication log ingestion
-- Splunk or other SIEM integration
+- Broader authentication-log ingestion beyond the included OpenSSH parser
+- End-to-end validation against test Splunk and Elasticsearch instances
 - Real-time monitoring
 - Email or chat alert notifications
 - Tune sequence windows against diverse benign and malicious scenarios
@@ -476,3 +510,123 @@ The robust evaluation now compares the existing automatic-contamination Isolatio
 
 The candidate methods are named `hybrid_contamination_0.03_or_rules` and `hybrid_contamination_0.05_or_rules` in the main evaluation CSV. Compare their precision, recall, and F1 against the corresponding ML-only and rules-only methods. A lower contamination setting does not guarantee better detection: it changes the model's alert volume, and the OR combination can increase false positives. Keep the current detector and dashboard logic unchanged until results are reviewed. These are synthetic-data experiments, not production performance claims.
 
+
+## REST API (FastAPI)
+
+The optional API scores a submitted login event against the local historical CSV and returns a risk level, Isolation Forest result, anomaly score, final disposition, and human-readable detection reasons.
+
+Install dependencies and start the service:
+
+```bash
+uvicorn src.api:app --reload
+```
+
+- Health: `GET /health`
+- Model readiness: `GET /ready`
+- Score one event: `POST /predict`
+- Interactive API documentation: `/docs`
+
+Example request:
+
+```json
+{
+  "timestamp": "2026-11-10T10:00:00",
+  "username": "alice",
+  "ip_address": "203.0.113.25",
+  "location": "Bengaluru, India",
+  "device": "Windows Laptop",
+  "login_status": "failed",
+  "failed_attempts": 1
+}
+```
+
+The service uses the repository's CSV as its historical context. It is a local prototype, not a multi-user production service: deploy with a persistent event store, authenticated access, tenant isolation, rate limiting, and operational monitoring before exposing it to a network.
+
+### Docker
+
+Build and start the API:
+
+```bash
+docker compose up --build
+```
+
+The API is available on host port **8001** and listens on port **8000** inside the container. The host binding is restricted to `127.0.0.1`; the local data and model folders are mounted read-only. Visit `http://localhost:8001/docs` for the interactive API docs. Host port 8001 is used to avoid conflicts with local services such as Splunk that commonly use port 8000.
+
+
+### Detection explanations and MITRE ATT&CK
+
+The API includes conservative ATT&CK references for a small set of specific authentication patterns:
+
+- Repeated failed attempts: possible alignment with **T1110.001 – Password Guessing**.
+- Failures against multiple accounts from one source: possible alignment with **T1110.003 – Password Spraying**.
+
+These are investigation hints, not confirmed technique attribution. Generic novelty signals and Isolation Forest anomalies are deliberately left unmapped because they are not specific enough.
+
+The API also emits structured request metadata (method, path, status, duration) without writing usernames, IP addresses, or request bodies to its access log.
+
+**Deployment boundary:** Docker Compose binds the API to `127.0.0.1` by default. Do not expose this prototype directly to the internet. A network deployment needs authentication, TLS, rate limiting, tenant isolation, a persistent event store, and monitoring.
+
+
+### Unsupervised model comparison
+
+Run the chronological model comparison:
+
+```bash
+python -m src.model_comparison
+```
+
+This compares **Isolation Forest**, **Local Outlier Factor (novelty mode)**, and **One-Class SVM** across future holdout windows. Each model is trained only on earlier rows; labels are used only after prediction to calculate metrics. The output is written to `reports/model_comparison.csv`.
+
+Do not select a model from accuracy alone. Compare recall, false-positive rate, precision, F1, anomaly support, and consistency across windows. All three models are still being evaluated on the same synthetic generator, so this comparison does not establish real-world generalisation.
+
+
+### OpenSSH authentication-log ingestion
+
+The project can now parse explicit SSH authentication events from Linux `auth.log` files into the same canonical schema used by the detector. It recognizes accepted and failed password/public-key/keyboard-interactive events, counts consecutive failures per account and source IP, and skips unrelated daemon messages.
+
+Example:
+
+```python
+from src.openssh_ingest import load_openssh_auth_log
+from src.preprocessing import preprocess_logs
+from src.feature_engineering import build_features
+
+events = load_openssh_auth_log("/var/log/auth.log", year=2026)
+clean = preprocess_logs(events, verbose=False)
+features = build_features(clean)
+print(features[["timestamp", "username", "ip_address", "login_status"]].tail())
+```
+
+The parser deliberately sets location and device to `unknown`; it does not invent geolocation or endpoint identity. Syslog timestamps omit the year, so pass the correct year for archived files. This is an ingestion adapter, not a claim that the saved synthetic-data model is calibrated for your server. For meaningful ML scoring, build a representative benign historical baseline from the target environment and evaluate it separately before deployment.
+
+### API authentication, rate limiting and SIEM forwarding
+
+The prediction endpoint now requires an API key in the `X-API-Key` header. If `DETECTOR_API_KEY` is not configured, prediction requests fail closed with HTTP 503. A per-client in-memory sliding-window limiter returns HTTP 429 when the configured threshold is reached. By default, it keys off the immediate TCP peer and ignores forwarded headers. If the API is reachable exclusively through a reverse proxy you control, set `DETECTOR_TRUSTED_PROXY_CIDRS` to that proxy's source CIDR(s); only requests whose immediate peer belongs to those networks may use the right-most IP in `X-Forwarded-For`. Do not trust arbitrary forwarded headers or expose the API directly to untrusted clients when enabling this setting. The limiter remains per-process and in-memory; use a shared Redis-backed limiter or trusted gateway enforcement for multi-worker/multi-instance deployments.
+
+Optional event forwarding supports:
+
+- **Splunk HEC:** `SPLUNK_HEC_URL` and `SPLUNK_HEC_TOKEN`
+- **Elasticsearch:** `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY`, and optional `ELASTICSEARCH_INDEX`
+
+Forwarding is disabled when credentials are absent. TLS certificate verification remains enabled. Delivery failures are logged without logging secrets or event payloads, and do not turn a successful detection into a failed prediction response. For reliable delivery at scale, use a durable queue/outbox and retry worker; this prototype makes bounded synchronous HTTP attempts.
+
+Copy `.env.example` to `.env`, generate a long random API key, and fill only the SIEM settings you actually use. Never commit `.env`. For local-only use, start the API with `docker compose up --build -d detector-api`.
+
+For public TLS termination with Caddy, configure `DOMAIN` and run:
+
+```bash
+docker compose --profile tls up --build -d
+```
+
+Caddy obtains and renews certificates automatically when DNS points to this host and inbound ports 80/443 are reachable. Keep the API service's host port bound to loopback. The API key is still required behind the proxy.
+
+### Evaluation on independently labelled logs
+
+The external evaluation harness accepts a CSV containing the canonical login columns plus an independently reviewed `true_label` column (`normal` or `anomaly`). It uses a chronological split, trains Isolation Forest on the earlier portion of that same dataset, and reports later-holdout metrics for ML, rules and hybrid detection.
+
+```bash
+python -m src.real_world_evaluation /path/to/labelled_auth_logs.csv \
+  --label-provenance "Analyst-reviewed incident tickets and confirmed benign events"
+```
+
+The command does not download or upload your data. Do not use labels generated by the same synthetic generator as evidence of real-world performance. The model comparison is meaningful only when labels are independent, the source environment is representative, and the holdout contains enough confirmed attack and benign examples.

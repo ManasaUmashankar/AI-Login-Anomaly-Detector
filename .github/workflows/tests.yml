@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - feature/multi-window-temporal-evaluation
+      - review/evaluation-audit-and-stress-test
+      - feature/deployable-detection-api
   pull_request:
     branches:
       - main

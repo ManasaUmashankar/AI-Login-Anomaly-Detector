@@ -299,6 +299,30 @@ def evaluate_scenario_detection(rows):
     return metrics, scenario_summary
 
 
+
+def build_scenario_recall_audit(rows):
+    """Break event-level attack recall down by scenario and detector."""
+    required = {"scenario", "true_label", "rule_prediction", "ml_prediction"}
+    missing = sorted(required - set(rows.columns))
+    if missing:
+        raise ValueError(f"Stress results are missing required columns: {missing}")
+    detectors = {"rules": "rule_prediction", "ml": "ml_prediction", "hybrid": "hybrid_prediction"}
+    records = []
+    attacks = rows[rows["true_label"].eq("anomaly")]
+    for scenario, group in attacks.groupby("scenario", sort=True):
+        for detector, column in detectors.items():
+            if column not in group.columns:
+                continue
+            detected = int(group[column].eq("anomaly").sum())
+            support = int(len(group))
+            records.append({"detector": detector, "scenario": scenario,
+                "attack_events": support, "detected_events": detected,
+                "missed_events": support - detected,
+                "event_recall": detected / support if support else 0.0,
+                "scenario_detected": detected > 0})
+    return pd.DataFrame(records, columns=["detector", "scenario", "attack_events",
+        "detected_events", "missed_events", "event_recall", "scenario_detected"])
+
 def build_error_audit(rows):
     """Return per-event false positives and false negatives for each detector."""
     required = {"scenario", "true_label", "rule_prediction", "ml_prediction"}
@@ -361,9 +385,12 @@ def main():
     rows.to_csv(event_report, index=False)
     scenario_rows.to_csv(scenario_report, index=False)
     build_error_audit(rows).to_csv(error_report, index=False)
+    recall_report = output_dir / "stress-test-scenario-recall.csv"
+    build_scenario_recall_audit(rows).to_csv(recall_report, index=False)
     print(f"Event outcomes: {event_report}")
     print(f"Scenario outcomes: {scenario_report}")
     print(f"False-positive / false-negative audit: {error_report}")
+    print(f"Per-scenario attack recall audit: {recall_report}")
     print("\n========== SYNTHETIC EDGE-CASE STRESS TEST ==========")
     print("Model trained on historical rows only; stress scenarios are held out.")
     print("All cases are synthetic and deliberately selected, not a real-world benchmark.")
