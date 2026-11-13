@@ -142,3 +142,23 @@ def test_api_key_rejects_invalid_and_accepts_valid(monkeypatch):
         security.require_api_key("wrong")
     assert error.value.status_code == 401
     assert security.require_api_key("test-secret") is True
+
+
+def test_naive_api_timestamp_is_interpreted_as_utc():
+    from datetime import datetime, timezone
+
+    normalized = api.normalize_event_timestamp(datetime(2026, 11, 10, 10, 0, 0))
+    assert normalized == datetime(2026, 11, 10, 10, 0, 0)
+    assert normalized.tzinfo is None
+
+
+def test_aware_api_timestamp_is_converted_to_utc():
+    from datetime import datetime, timezone, timedelta
+
+    timestamp = datetime(
+        2026, 11, 10, 10, 0, 0,
+        tzinfo=timezone(timedelta(hours=5, minutes=30)),
+    )
+    normalized = api.normalize_event_timestamp(timestamp)
+    assert normalized == datetime(2026, 11, 10, 4, 30, 0)
+    assert normalized.tzinfo is None
