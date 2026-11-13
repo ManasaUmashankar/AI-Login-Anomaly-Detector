@@ -54,6 +54,17 @@ async def log_request_metadata(request, call_next):
     return response
 
 
+def normalize_event_timestamp(timestamp: datetime) -> datetime:
+    """Return a naive UTC timestamp for the repository's timezone-naive log schema.
+
+    Naive client timestamps are interpreted as UTC. Aware timestamps are
+    converted to UTC before timezone information is removed.
+    """
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 class LoginEvent(BaseModel):
     """Validated login event accepted by POST /predict."""
 
@@ -102,9 +113,7 @@ def predict(event: LoginEvent):
     # Generate a unique identifier to avoid colliding with historical sessions.
     event_id = f"api-{uuid4()}"
     event_row["session_id"] = event_id
-    timestamp = event_row["timestamp"]
-    if timestamp.tzinfo is not None:
-        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+    timestamp = normalize_event_timestamp(event_row["timestamp"])
     event_row["timestamp"] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     combined = pd.concat([history, pd.DataFrame([event_row])], ignore_index=True)
