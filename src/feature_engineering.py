@@ -191,7 +191,12 @@ def add_failed_users_per_ip_window(df):
 
 
 def build_features(df):
-    """Add all model features using strictly historical, timestamp-safe baselines."""
+    """Add timestamp-safe features using prior history and the current timestamp batch.
+
+    Historical baseline features use strictly earlier timestamps. Rolling count
+    features include the current timestamp batch, so simultaneous events share
+    the same batch-level counts independent of row order.
+    """
     df = df.copy()
     # Pandas Arrow-backed strings can make repeated scalar comparisons inside
     # timestamp batches disproportionately expensive. Convert the small set
