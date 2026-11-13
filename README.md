@@ -396,6 +396,12 @@ Run `python -m src.evaluation_suite` to execute the label/rule alignment audit, 
 
 The command writes CSV artifacts and `reports/evaluation_report.md` under `reports/`. `temporal_window_metrics.csv` preserves seed, window, train/test row counts, chronological boundaries, anomaly support, predictions, and confusion counts. `multi_seed_summary.csv` records seed count, split settings, and aggregation. Inspect label alignment for overlap between synthetic label-generation patterns and detector rules. The report does not overwrite headline metrics in this README; update published snapshots only after reviewing what each metric measures. All scores are synthetic-data diagnostics, not real-world benchmarks.
 
+## Automated Evaluation (GitHub Actions)
+
+The `.github/workflows/synthetic-evaluation.yml` workflow runs the full pytest suite and regenerates the consolidated synthetic evaluation when relevant project files change in a pull request. It can also be started manually from the repository's **Actions** tab using **Synthetic evaluation report**.
+
+The generated `reports/` directory is uploaded as a workflow artifact named `synthetic-evaluation-report` and is retained by GitHub Actions for 30 days. Download that artifact to inspect the report and CSV files from the exact CI run. The workflow does not commit generated reports or publish performance numbers automatically; review the dataset, run configuration, and limitations before quoting any metric.
+
 ## Limitations
 
 | Limitation | Notes |
