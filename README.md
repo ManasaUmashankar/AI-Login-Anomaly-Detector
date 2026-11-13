@@ -317,16 +317,24 @@ Exact labels and counts can change with the dataset and pipeline output. The das
 
 ## Dashboard Screenshots
 
-The screenshot files referenced in an earlier version of this README are not currently present in the repository. To avoid broken image links or implying that screenshots have been verified, this section will be populated after fresh screenshots are captured from the current Streamlit dashboard.
+The following captures show the local Streamlit prototype running on synthetic authentication data. They are interface examples, not evidence of live monitoring or production detection performance.
 
-Recommended screenshots to add under `docs/images/`:
+### Security overview
 
-- `dashboard-overview.jpg` — overview metrics and authentication trends
-- `alert-queue.jpg` — alert queue with risk scores and severity
-- `severity-filter.jpg` — the alert table with the relevant severity filter visibly applied
-- `alert-investigation.jpg` — selected event details and detection reasons
+![Dashboard overview](docs/images/dashboard-overview.png)
 
-Only include screenshots that actually match the described view. Use synthetic data and avoid exposing credentials, tokens, or personal information.
+### Analyst alert queue
+
+![Analyst alert queue](docs/images/analyst-alert-queue.png)
+
+### Event investigation
+
+![Event investigation](docs/images/event-investigation.png)
+
+### Filtered dashboard
+
+![Filtered dashboard](docs/images/filtered-dashboard.png)
+
 
 ## Example Output
 
