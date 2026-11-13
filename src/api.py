@@ -70,7 +70,9 @@ class LoginEvent(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    timestamp: datetime
+    timestamp: datetime = Field(
+        description="Login event timestamp. Naive values are interpreted as UTC; offset-aware values are converted to UTC."
+    )
     username: str = Field(min_length=1, max_length=128)
     ip_address: str = Field(min_length=1, max_length=64)
     location: str = Field(min_length=1, max_length=128)
