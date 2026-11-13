@@ -8,6 +8,9 @@ on:
       - "tests/**"
       - "data/login_logs.csv"
       - "requirements.txt"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "Caddyfile"
       - ".github/workflows/synthetic-evaluation.yml"
 
 permissions:
@@ -35,6 +38,9 @@ jobs:
 
       - name: Run test suite
         run: python -m pytest -q
+
+      - name: Build API Docker image
+        run: docker build --tag ai-login-anomaly-detector:ci .
 
       - name: Generate consolidated synthetic evaluation
         run: python -m src.evaluation_suite
