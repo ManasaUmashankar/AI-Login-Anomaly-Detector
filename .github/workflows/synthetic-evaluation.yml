@@ -45,8 +45,24 @@ jobs:
       - name: Generate consolidated synthetic evaluation
         run: python -m src.evaluation_suite
 
-      - name: Run multi-seed robust evaluation
-        run: python -m src.robust_evaluation --seeds 20 --windows 4 --output reports/robust-evaluation.csv
+      - name: Validate evaluation report outputs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+
+          required = ["evaluation_summary.csv", "evaluation_report.md", "multi_seed_summary.csv", "temporal_window_metrics.csv"]
+          missing = [name for name in required if not (Path("reports") / name).is_file()]
+          if missing:
+              raise SystemExit(f"Missing evaluation outputs: {missing}")
+          summary = pd.read_csv(Path("reports") / "evaluation_summary.csv")
+          if not summary.columns.is_unique:
+              raise SystemExit("evaluation_summary.csv contains duplicate headers")
+          expected = {"evaluation_scope", "detector", "metric", "mean", "std", "tp", "fp", "fn", "tn"}
+          if set(summary.columns) != expected:
+              raise SystemExit(f"Unexpected evaluation summary schema: {summary.columns.tolist()}")
+          print(f"Validated {len(required)} evaluation artifacts and {len(summary)} summary rows.")
+          PY
 
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
