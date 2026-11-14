@@ -45,6 +45,9 @@ jobs:
       - name: Generate consolidated synthetic evaluation
         run: python -m src.evaluation_suite
 
+      - name: Run multi-seed robust evaluation
+        run: python -m src.robust_evaluation --seeds 20 --windows 4 --output reports/robust-evaluation.csv
+
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
