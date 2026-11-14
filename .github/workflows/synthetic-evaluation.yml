@@ -42,6 +42,34 @@ jobs:
       - name: Build API Docker image
         run: docker build --tag ai-login-anomaly-detector:ci .
 
+      - name: Smoke-test API container
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name detector-api-ci -p 127.0.0.1:8001:8000 -e DETECTOR_API_KEY=ci-test-key ai-login-anomaly-detector:ci
+          cleanup() { docker rm --force detector-api-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8001/health >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then docker logs detector-api-ci; exit 1; fi
+          curl --fail --silent http://127.0.0.1:8001/ready
+          response=$(curl --fail-with-body --silent --show-error -X POST http://127.0.0.1:8001/predict \
+            -H 'Content-Type: application/json' -H 'X-API-Key: ci-test-key' \
+            -d '{"timestamp":"2026-11-14T10:00:00Z","username":"ci-smoke-user","ip_address":"203.0.113.250","location":"Bengaluru, India","device":"Windows Laptop","login_status":"success","failed_attempts":0}')
+          RESPONSE="$response" python - <<'PY'
+          import json, os
+          result = json.loads(os.environ["RESPONSE"])
+          required = {"timestamp", "username", "risk_score", "risk_level", "ml_result", "final_status", "detection_reasons", "risk_signals", "mitre_attack", "disclaimer"}
+          missing = required.difference(result)
+          if missing:
+              raise SystemExit(f"Prediction response missing fields: {sorted(missing)}")
+          if result["username"] != "ci-smoke-user":
+              raise SystemExit("Prediction response did not correspond to submitted event")
+          print("API container health, model readiness, and authenticated prediction smoke test passed.")
+          PY
+
       - name: Generate consolidated synthetic evaluation
         run: python -m src.evaluation_suite
 
