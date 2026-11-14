@@ -390,7 +390,7 @@ A stronger future evaluation would use appropriately anonymised authentication l
 - [Evaluation guide and metric interpretation](docs/evaluation-guide.md)
 - [Demo walkthrough](docs/demo-walkthrough.md)
 - [SOC Analyst interview notes](docs/interview-notes.md)
-- [Latest verified synthetic evaluation snapshot](docs/latest-synthetic-evaluation.md)
+- [Verified synthetic evaluation snapshot (historical run)](docs/latest-synthetic-evaluation.md)
 
 ## Testing
 
@@ -541,6 +541,8 @@ Example request:
 ```
 
 The service uses the repository's CSV as its historical context. It is a local prototype, not a multi-user production service: deploy with a persistent event store, authenticated access, tenant isolation, rate limiting, and operational monitoring before exposing it to a network.
+
+**Input trust boundary:** `failed_attempts` is accepted as a request field and is also used by the current model feature set. The API does not independently reconstruct this counter from a trusted identity-provider event stream. Only send values produced by a trusted collector; do not let an end user or untrusted client choose this value. Before using the API beyond a local demonstration, derive sequence counters server-side from validated events and persist them with per-account and per-tenant isolation.
 
 ### Docker
 

@@ -1,10 +1,12 @@
-# Latest Synthetic Evaluation Snapshot
+# Verified Synthetic Evaluation Snapshot
 
 **Run date:** 2026-11-13  
 **GitHub Actions run:** [Synthetic evaluation report #43377124172](https://github.com/ManasaUmashankar/AI-Login-Anomaly-Detector/actions/runs/43377124172)  
 **Commit:** `eaf14a594b88be37e712c96b09d194247554dcfb`  
 **Dataset:** 1,588 synthetic login events (1,500 normal; 88 anomaly-labelled)  
 **CI result:** 114 tests passed; Docker image build, consolidated evaluation, and artifact upload completed successfully. The test run emitted three warnings; none failed the workflow.
+
+> **Snapshot scope:** This is the latest successful consolidated evaluation recorded in this file, from commit `eaf14a594b88be37e712c96b09d194247554dcfb`. It is not a verification of subsequent `main` commits. Re-run the evaluation workflow on the current commit before describing these figures as current.
 
 > These results are synthetic engineering diagnostics. They are not a real-world benchmark and do not establish production SOC effectiveness.
 
