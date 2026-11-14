@@ -10,12 +10,14 @@ Run from the repository root with the project's virtual environment active:
 python -m src.evaluate_model
 python -m src.audit_label_alignment
 python -m src.stress_test_evaluation
+python -m src.evaluation_suite
 python -m pytest -v
 ```
 
-- `src.evaluate_model` evaluates Isolation Forest across four chronological holdout windows and compares it with a rule/risk-score baseline.
+- `src.evaluate_model` evaluates Isolation Forest across four chronological holdout windows and compares it with a rule/risk-score baseline. Its seed-sweep function repeats those chronological windows across 20 model seeds by default and reports mean and sample standard deviation across seed-level window averages.
 - `src.audit_label_alignment` checks how individual signals and the combined risk-score baseline align with labels created by the synthetic data generator.
 - `src.stress_test_evaluation` tests a separate set of controlled edge-case events, including benign, suspicious, and ambiguous scenarios.
+- `src.evaluation_suite` runs the label-alignment audit, 20-seed chronological evaluation, controlled stress test, and writes consolidated CSV/Markdown reports under `reports/`.
 - `pytest` runs the regression suite.
 
 ## What the metrics mean
